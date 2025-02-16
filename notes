@@ -25,7 +25,7 @@ import java.util.logging.Logger;
 public class EnhancedManualJDBCBatchItemWriter implements ItemWriter<EntityRecord>, AutoCloseable {
     private static final Logger logger = Logger.getLogger(EnhancedManualJDBCBatchItemWriter.class.getName());
     
-    private String sqlTemplate;
+    private volatile String sqlTemplate;
     private final HikariDataSource dataSource;
     private final ExecutorService executorService;
     private final int batchSize;
@@ -79,6 +79,9 @@ public class EnhancedManualJDBCBatchItemWriter implements ItemWriter<EntityRecor
     }
 
     public synchronized void setSqlTemplate(String sqlTemplate) {
+        if (sqlTemplate == null || sqlTemplate.trim().isEmpty()) {
+            throw new IllegalArgumentException("SQL template cannot be null or empty");
+        }
         this.sqlTemplate = sqlTemplate;
     }
 
