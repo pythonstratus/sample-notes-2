@@ -1,0 +1,385 @@
+import java.text.SimpleDateFormat;
+import java.util.Date;
+
+public class E5TMPLoader {
+    // Data class to represent the record structure
+    public static class E5TMPRecord {
+        private String outputCD;          // POSITION(1:2)
+        private long empAsgnmtNum;        // POSITION(3:10)
+        private String empName;           // POSITION(11:45)
+        private String empGradeCD;        // POSITION(46:47)
+        private char empTypeCD;           // POSITION(48)
+        private char tourOfDuty;          // POSITION(49)
+        private char empWorkArea;         // POSITION(50)
+        private char tpsPodInd;           // POSITION(51)
+        private char csuPodInd;           // POSITION(52)
+        private char paraPodInd;          // POSITION(53)
+        private char mngrPodInd;          // POSITION(54)
+        private char empPositTypeCD;      // POSITION(55)
+        private char flexPlaceInd;        // POSITION(56)
+        private Date empUpdateDt;         // POSITION(57:64)
+        private Date entExtractDt;        // POSITION(65:72)
+        private String empIdNum;          // POSITION(73:82)
+        private String empTitle;          // POSITION(83:107)
+        private int areaCD;               // POSITION(108:110)
+        private int phone;                // POSITION(111:117)
+        private int ext;                  // POSITION(118:124)
+        private int prevId;               // POSITION(125:132)
+        private String seId;              // POSITION(133:137)
+        private String email;             // POSITION(142:186)
+        private char icSacc;              // POSITION(187)
+        private String empPodCD;          // POSITION(188:190)
+        private int gs9Cnt;               // POSITION(191:194)
+        private int gs11Cnt;              // POSITION(195:198)
+        private int gs12Cnt;              // POSITION(199:202)
+        private int gs13Cnt;              // POSITION(203:206)
+
+        // Constructor with default values
+        public E5TMPRecord() {
+            // Initialize default values if needed
+        }
+
+        // Getters and setters for all fields
+        // ... (implement all getters and setters)
+    }
+
+    public E5TMPRecord parseRecord(String line) throws Exception {
+        if (line == null || line.length() < 206) {
+            throw new IllegalArgumentException("Invalid record length");
+        }
+
+        SimpleDateFormat dateFormat = new SimpleDateFormat("yyyyMMdd");
+        E5TMPRecord record = new E5TMPRecord();
+
+        try {
+            // Parse each field according to its position
+            record.outputCD = line.substring(0, 2);
+            record.empAsgnmtNum = Long.parseLong(line.substring(2, 10).trim());
+            record.empName = line.substring(10, 45).trim();
+            record.empGradeCD = line.substring(45, 47);
+            record.empTypeCD = line.charAt(47);
+            record.tourOfDuty = line.charAt(48);
+            record.empWorkArea = line.charAt(49);
+            
+            // Handle decoded fields
+            record.tpsPodInd = decodePodInd(line.charAt(50));
+            record.csuPodInd = decodePodInd(line.charAt(51));
+            record.paraPodInd = decodePodInd(line.charAt(52));
+            record.mngrPodInd = decodePodInd(line.charAt(53));
+            
+            record.empPositTypeCD = line.charAt(54);
+            record.flexPlaceInd = decodeFlexPlace(line.charAt(55));
+            
+            // Handle dates with replacement
+            String empUpdateDtStr = replaceDate(line.substring(56, 64));
+            record.empUpdateDt = dateFormat.parse(empUpdateDtStr);
+            
+            String entExtractDtStr = replaceDate(line.substring(64, 72));
+            record.entExtractDt = dateFormat.parse(entExtractDtStr);
+            
+            record.empIdNum = line.substring(72, 82).trim();
+            record.empTitle = line.substring(82, 107).trim();
+            record.areaCD = Integer.parseInt(line.substring(107, 110).trim());
+            record.phone = Integer.parseInt(line.substring(110, 117).trim());
+            record.ext = Integer.parseInt(line.substring(117, 124).trim());
+            record.prevId = Integer.parseInt(line.substring(124, 132).trim());
+            record.seId = line.substring(132, 137).trim();
+            record.email = line.substring(141, 186).trim();
+            record.icSacc = line.charAt(186);
+            record.empPodCD = line.substring(187, 190).trim();
+            record.gs9Cnt = Integer.parseInt(line.substring(190, 194).trim());
+            record.gs11Cnt = Integer.parseInt(line.substring(194, 198).trim());
+            record.gs12Cnt = Integer.parseInt(line.substring(198, 202).trim());
+            record.gs13Cnt = Integer.parseInt(line.substring(202, 206).trim());
+
+        } catch (Exception e) {
+            throw new Exception("Error parsing record: " + e.getMessage());
+        }
+
+        return record;
+    }
+
+    private char decodePodInd(char value) {
+        return value == '0' ? 'T' : 'F';
+    }
+
+    private char decodeFlexPlace(char value) {
+        return value == 'Y' ? 'T' : 'F';
+    }
+
+    private String replaceDate(String date) {
+        return "00000000".equals(date) ? "19000101" : date;
+    }
+
+    // Method to load data from a file
+    public void loadData(String filename) {
+        // TODO: Implement file reading logic
+        // 1. Read the file line by line
+        // 2. Parse each line using parseRecord()
+        // 3. Store or process the records as needed
+    }
+
+    // Exception class for validation errors
+    public static class RecordValidationException extends Exception {
+        public RecordValidationException(String message) {
+            super(message);
+        }
+    }
+}
+
+//
+
+E5TMPLoader loader = new E5TMPLoader();
+try {
+    E5TMPLoader.E5TMPRecord record = loader.parseRecord(yourInputString);
+    // Process the record as needed
+} catch (Exception e) {
+    // Handle exceptions
+    e.printStackTrace();
+}
+
+// proc file
+
+import java.io.*;
+import java.sql.*;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Properties;
+
+public class E5Processor {
+    private Connection connection;
+    private String logDir;
+    private String password;
+    private static final String DATE_FORMAT = "MM/dd/yyyy HH:mm:ss";
+    private static final String LOG_TABLE = "LOGLOAD";
+    
+    public E5Processor(String logDirectory) {
+        this.logDir = logDirectory;
+    }
+
+    public void process() {
+        try {
+            // Decrypt and set password
+            password = decryptPassword();
+            
+            // Initialize database connection
+            initializeConnection();
+            
+            // Log process start
+            logMessage("Begin process c.procE5.............date '" + 
+                      new SimpleDateFormat(DATE_FORMAT).format(new Date()) + "'");
+
+            // Truncate E5TMP table
+            truncateTable("E5TMP");
+
+            // Load E5.dat into E5TMP table
+            loadE5Data();
+
+            // Process bad records if any
+            processBadRecords();
+
+            // Perform database operations
+            performDatabaseOperations();
+
+            // Create log record
+            createLogRecord();
+
+            // Log completion
+            logMessage("\\nPROCESS COMPLETE");
+
+        } catch (Exception e) {
+            logError("Error in process: " + e.getMessage());
+        } finally {
+            cleanup();
+        }
+    }
+
+    private void performDatabaseOperations() throws SQLException {
+        // Count before delete
+        int countBefore = getCount("SELECT count(*) FROM E5TMP");
+        logMessage("Count Before Delete EMPASGTNUM From E5TMP Table: " + countBefore);
+
+        // Delete records with null empasgtnum
+        executeUpdate("DELETE FROM E5TMP WHERE empasgtnum is NULL");
+
+        // Update empidnum
+        executeUpdate("UPDATE E5TMP set empidnum = '99-999999' WHERE empidnum = '-'");
+
+        // Count after delete
+        int countAfter = getCount("SELECT count(*) FROM E5TMP");
+        logMessage("Count After Delete EMPASGTNUM From E5TMP Table: " + countAfter);
+
+        // Update EACTIVE in ENTEMP
+        executeUpdate("UPDATE ENTEMP set EACTIVE = 'N' WHERE ROID not like '@5%'");
+
+        // Count before merge
+        int countBeforeMerge = getCount("SELECT count(*) FROM ENTEMP");
+        logMessage("Count Before Merge Of ENTEMP Table: " + countBeforeMerge);
+
+        // Perform merge operation
+        executeMergeOperation();
+
+        // Count after merge
+        int countAfterMerge = getCount("SELECT count(*) FROM ENTEMP");
+        logMessage("Count After Merge Of ENTEMP Table: " + countAfterMerge);
+
+        // Update UNIX in ENTEMP
+        executeUpdate(
+            "UPDATE ENTEMP a " +
+            "SET a.unix = (SELECT b.unix FROM ENTEMP b " +
+            "WHERE a.seid = b.seid AND b.unix is not NULL and rownum = 1) " +
+            "WHERE a.eactive in ('Y','A') AND " +
+            "a.seid not in ('99999', '00000', '44444') AND " +
+            "a.seid is not NULL AND a.unix is NULL"
+        );
+
+        // Update POSTYPE in ENTEMP
+        executeUpdate(
+            "UPDATE ENTEMP set postype = '5', elevel = '2' " +
+            "WHERE eactive = 'N' and postype not in ('8','Y')"
+        );
+
+        // Update ELEVEL in ENTEMP
+        executeUpdate(
+            "UPDATE ENTEMP set elevel = setelevel(icsacc,title,postype) " +
+            "WHERE ROID not like '@5%'"
+        );
+
+        // Update PRIMARY_ROID in ENTEMP
+        executeUpdate(
+            "UPDATE ENTEMP set PRIMARY_ROID = 'N' " +
+            "WHERE PRIMARY_ROID is NULL"
+        );
+
+        // Call EMP_ORG procedure
+        callStoredProcedure("emp_org");
+
+        // Drop and recreate ENTEMP2
+        executeUpdate("DROP table ENTEMP2");
+        executeUpdate("CREATE table ENTEMP2 TABLESPACE ENTITY as (SELECT * FROM ENTEMP)");
+    }
+
+    private void executeMergeOperation() throws SQLException {
+        String mergeSql = 
+            "MERGE INTO ENTEMP a " +
+            "USING (SELECT * FROM ALS.E5TMP WHERE EMPASGTNUM not like '@5%') b " +
+            "ON (a.ROID = b.EMPASGTNUM and nvl(a.SEID, '00000')=nvl(b.SEID, '00000')) " +
+            "WHEN MATCHED THEN " +
+            "UPDATE SET " +
+            // ... (include all update fields from the merge statement)
+            "WHEN NOT MATCHED THEN " +
+            "INSERT " +
+            // ... (include all insert fields from the merge statement)
+            "VALUES " +
+            // ... (include all values from the merge statement)
+            ;
+        
+        executeUpdate(mergeSql);
+    }
+
+    private String decryptPassword() {
+        // Implementation for password decryption
+        return "${CODIR}/Decipherit als";
+    }
+
+    private void loadE5Data() throws SQLException {
+        // Implementation for loading E5.dat using SqlLoader
+        String sqlLoaderCommand = "sqlldr control=${LOGDIR}/loadE5.ctl errors=2000000";
+        executeCommand(sqlLoaderCommand);
+    }
+
+    private void processBadRecords() throws Exception {
+        File badFile = new File("E5.bad");
+        if (badFile.exists()) {
+            int badCount = countLinesInFile(badFile);
+            if (badCount > 0) {
+                logError("ERROR: c.procE5 sqlldr - " + badCount + " records in E5.bad");
+                throw new Exception("Bad records found in E5.bad");
+            }
+        }
+    }
+
+    private void createLogRecord() throws SQLException {
+        SimpleDateFormat sdf = new SimpleDateFormat("MM/dd/yyyy HH:mm:ss");
+        String sql = "INSERT INTO " + LOG_TABLE + 
+                    " (LOADNAME, EXTRDT, LOADDT, TIME, DATEFORMAT, ME, NUMRECS) " +
+                    "VALUES (?, ?, ?, ?, ?, ?, ?)";
+        
+        try (PreparedStatement pstmt = connection.prepareStatement(sql)) {
+            pstmt.setString(1, "E5");
+            // Set other parameters as needed
+            pstmt.executeUpdate();
+        }
+    }
+
+    // Utility methods
+    private void executeUpdate(String sql) throws SQLException {
+        try (Statement stmt = connection.createStatement()) {
+            stmt.executeUpdate(sql);
+        }
+    }
+
+    private int getCount(String sql) throws SQLException {
+        try (Statement stmt = connection.createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
+            return rs.next() ? rs.getInt(1) : 0;
+        }
+    }
+
+    private void logMessage(String message) {
+        System.out.println(message);
+        // Implement logging to file if needed
+    }
+
+    private void logError(String error) {
+        System.err.println(error);
+        // Implement error logging to file if needed
+    }
+
+    private void cleanup() {
+        try {
+            if (connection != null && !connection.isClosed()) {
+                connection.close();
+            }
+        } catch (SQLException e) {
+            logError("Error closing connection: " + e.getMessage());
+        }
+    }
+
+    private void initializeConnection() throws SQLException {
+        Properties props = new Properties();
+        props.setProperty("user", "als");
+        props.setProperty("password", password);
+        // Set up your database connection URL
+        connection = DriverManager.getConnection("jdbc:oracle:thin:@your_database_url", props);
+    }
+
+    private void callStoredProcedure(String procedureName) throws SQLException {
+        try (CallableStatement stmt = connection.prepareCall("{call " + procedureName + "}")) {
+            stmt.execute();
+        }
+    }
+
+    private int countLinesInFile(File file) throws IOException {
+        int count = 0;
+        try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
+            while (reader.readLine() != null) count++;
+        }
+        return count;
+    }
+
+    private void executeCommand(String command) {
+        try {
+            Process process = Runtime.getRuntime().exec(command);
+            process.waitFor();
+        } catch (Exception e) {
+            logError("Error executing command: " + command + "\n" + e.getMessage());
+        }
+    }
+
+    // Main method for testing
+    public static void main(String[] args) {
+        E5Processor processor = new E5Processor("/path/to/logdir");
+        processor.process();
+    }
+}
