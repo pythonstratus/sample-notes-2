@@ -111,12 +111,63 @@ public class E5TMPLoader {
         return "00000000".equals(date) ? "19000101" : date;
     }
 
-    // Method to load data from a file
-    public void loadData(String filename) {
-        // TODO: Implement file reading logic
-        // 1. Read the file line by line
-        // 2. Parse each line using parseRecord()
-        // 3. Store or process the records as needed
+    public List<E5TMPRecord> loadData(String filename) throws IOException {
+        List<E5TMPRecord> records = new ArrayList<>();
+        int lineNumber = 0;
+        
+        try (BufferedReader reader = new BufferedReader(new FileReader(filename))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                lineNumber++;
+                try {
+                    if (line.trim().isEmpty()) {
+                        continue; // Skip empty lines
+                    }
+                    E5TMPRecord record = parseRecord(line);
+                    records.add(record);
+                } catch (Exception e) {
+                    System.err.println("Error processing line " + lineNumber + ": " + e.getMessage());
+                    System.err.println("Line content: " + line);
+                }
+            }
+        }
+        
+        return records;
+    }
+
+    // Add a main method for testing
+    public static void main(String[] args) {
+        E5TMPLoader loader = new E5TMPLoader();
+        String filePath = "path/to/your/E5.dat"; // Replace with your actual file path
+        
+        try {
+            List<E5TMPRecord> records = loader.loadData(filePath);
+            System.out.println("Successfully loaded " + records.size() + " records.");
+            
+            // Print first few records as sample
+            System.out.println("\nSample Records:");
+            records.stream()
+                  .limit(5)
+                  .forEach(record -> printRecord(record));
+                  
+        } catch (IOException e) {
+            System.err.println("Error reading file: " + e.getMessage());
+        }
+    }
+
+    // Helper method to print record details
+    private static void printRecord(E5TMPRecord record) {
+        SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
+        System.out.println("\nRecord Details:");
+        System.out.println("Employee Name: " + record.empName);
+        System.out.println("Employee ID: " + record.empIdNum);
+        System.out.println("Grade Code: " + record.empGradeCD);
+        System.out.println("Update Date: " + 
+            (record.empUpdateDt != null ? dateFormat.format(record.empUpdateDt) : "N/A"));
+        System.out.println("Area Code: " + record.areaCD);
+        System.out.println("Phone: " + record.phone);
+        System.out.println("Email: " + record.email);
+        System.out.println("--------------------");
     }
 
     // Exception class for validation errors
