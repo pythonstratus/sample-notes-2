@@ -25,7 +25,7 @@ import java.util.logging.Logger;
 public class EnhancedManualJDBCBatchItemWriter implements ItemWriter<EntityRecord>, AutoCloseable {
     private static final Logger logger = Logger.getLogger(EnhancedManualJDBCBatchItemWriter.class.getName());
     
-    private final String sqlTemplate;
+    private String sqlTemplate;
     private final HikariDataSource dataSource;
     private final ExecutorService executorService;
     private final int batchSize;
@@ -38,7 +38,7 @@ public class EnhancedManualJDBCBatchItemWriter implements ItemWriter<EntityRecor
     @Autowired
     public EnhancedManualJDBCBatchItemWriter(
             @Qualifier("batchDataSource") DataSource dataSource,
-            @Value("${batch.sql.template}") String sqlTemplate,
+            String sqlTemplate, 
             @Value("${batch.size:1000}") int batchSize,
             @Value("${batch.thread.pool.size:#{T(java.lang.Runtime).getRuntime().availableProcessors()}}") 
             int threadPoolSize) {
@@ -76,6 +76,10 @@ public class EnhancedManualJDBCBatchItemWriter implements ItemWriter<EntityRecor
             template.setBatchSize(batchSize);
             return template;
         });
+    }
+
+    public synchronized void setSqlTemplate(String sqlTemplate) {
+        this.sqlTemplate = sqlTemplate;
     }
 
     @Override
@@ -303,7 +307,6 @@ spring.datasource.hikari.validation-timeout=5000
 # Batch Processing Configuration
 batch.size=1000
 batch.thread.pool.size=8
-batch.sql.template=YOUR_SQL_TEMPLATE
 batch.chunk.size=500
 batch.retry.max.attempts=3
 batch.retry.backoff.period=1000
