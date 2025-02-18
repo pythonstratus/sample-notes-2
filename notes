@@ -453,3 +453,48 @@ For questions or issues:
 - Team: Extract Processing Team
 - Email: extract-team@company.com
 - Slack: #extract-service-support
+
+
+****************************************************
+
+1. Original Problem:
+- There's a discrepancy in subcodes in the ENTCODE table between Dec 25th, 2024 and Feb 16th, 2025
+- The subcode descriptions don't match their corresponding timecode descriptions
+- This leads to "irregular" report files during EOI (End of Insurance) reporting
+- The issue affects how certain items are classified (Captive Insurance Abuse vs. ATAT Collection Strategy)
+
+2. Diane's Concern:
+- This appears to be a new issue that wasn't captured in their requirements gathering
+- She's asking how to add this to "Diconia's list of things" that need to be done
+- More broadly, she's asking about the process for handling new issues as they arise
+
+For a response to Diane, I would suggest:
+
+```
+Hi Diane,
+
+Thank you for bringing this up. You raise two important points:
+
+1. Regarding the immediate subcode discrepancy issue: I suggest we create a high-priority ticket in our tracking system for the ENTCODE table mismatches. This should be addressed promptly given its impact on EOI reporting accuracy.
+
+2. For the broader process question: Let's establish a clear protocol for emerging issues:
+   - Create a "New Issues" section in our project tracking system
+   - Set up a weekly review of new items with the requirements team
+   - Maintain a changelog documenting when and why items are added
+
+To address your confidence concern, we can implement status updates that include:
+   - Weekly progress reports on added items
+   - Documentation of completed actions
+   - Regular stakeholder sign-offs on additions and completions
+
+Would you like me to set up a brief meeting to discuss implementing these processes?
+```
+
+This response:
+- Acknowledges both the specific issue and the process concern
+- Provides a concrete solution for tracking
+- Addresses the confidence issue through regular updates and documentation
+- Maintains professionalism while offering actionable steps
+- Opens the door for further discussion if needed
+
+The key to addressing the confidence issue is establishing a clear paper trail and regular communication about progress, rather than just adding items to a list without follow-up.
