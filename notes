@@ -153,3 +153,47 @@ END COMPARE_TABLES;
 
 -- To view results:
 -- SELECT * FROM TABLE_COMPARISON_RESULTS ORDER BY comparison_type, record_status;
+
+
+///
+
+
+I've created a comprehensive stored procedure that will compare tables between Dev and Prod environments. Here are the key features:
+
+1. Structure Comparison:
+   - Identifies columns that exist in one environment but not the other
+   - Compares data types and lengths
+   - Highlights any differences in column definitions
+
+2. Data Comparison:
+   - Uses primary keys if available, otherwise uses all matching columns
+   - Identifies missing records in either environment
+   - Detects differences in values
+   - Creates row-level hashes to efficiently identify differences
+
+3. Results Storage:
+   - Creates a result table named TABLE_COMPARISON_RESULTS
+   - Stores both structure and data differences
+   - Includes detailed information about the differences found
+
+To use the procedure:
+
+1. First, ensure you have the necessary database links set up between Dev and Prod
+2. Run the procedure with your parameters:
+```sql
+EXEC COMPARE_TABLES('DEV_LINK', 'YOUR_TABLE', 'PROD_LINK', 'YOUR_TABLE');
+```
+3. View the results:
+```sql
+SELECT * FROM TABLE_COMPARISON_RESULTS ORDER BY comparison_type, record_status;
+```
+
+The results table contains these columns:
+- comparison_type: 'STRUCTURE' or 'DATA'
+- record_status: Indicates the type of difference found
+- column_name: Relevant for structure differences
+- dev_value: Value in Dev environment
+- prod_value: Value in Prod environment
+- primary_key_info: Primary key values for data differences
+
+Would you like me to explain any specific part in more detail or make any modifications to the procedure?
