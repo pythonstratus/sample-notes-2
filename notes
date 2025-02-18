@@ -1,334 +1,155 @@
-package com.abc.sbse.os.ts.csp.alsentity.ale.batch;
-
-import com.abc.sbse.os.ts.csp.alsentity.ale.dom.EntityRecord;
-import com.abc.sbse.os.ts.csp.alsentity.ale.dom.FieldData;
-import com.zaxxer.hikari.HikariDataSource;
-
-import org.springframework.batch.item.Chunk;
-import org.springframework.batch.item.ItemWriter;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.stereotype.Component;
-
-import javax.sql.DataSource;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.logging.Level;
-import java.util.logging.Logger;
-
-@Component
-public class EnhancedManualJDBCBatchItemWriter implements ItemWriter<EntityRecord>, AutoCloseable {
-    private static final Logger logger = Logger.getLogger(EnhancedManualJDBCBatchItemWriter.class.getName());
+CREATE OR REPLACE PROCEDURE COMPARE_TABLES (
+    p_dev_db_link    IN VARCHAR2,
+    p_dev_table      IN VARCHAR2,
+    p_prod_db_link   IN VARCHAR2,
+    p_prod_table     IN VARCHAR2
+)
+AS
+    v_dev_columns    VARCHAR2(4000);
+    v_prod_columns   VARCHAR2(4000);
+    v_common_cols    VARCHAR2(4000);
+    v_dynamic_sql    VARCHAR2(32767);
+    v_result_table   VARCHAR2(30) := 'TABLE_COMPARISON_RESULTS';
+BEGIN
+    -- Create result table if it doesn't exist
+    BEGIN
+        EXECUTE IMMEDIATE 'DROP TABLE ' || v_result_table;
+    EXCEPTION
+        WHEN OTHERS THEN NULL;
+    END;
     
-    private volatile String sqlTemplate;
-    private final HikariDataSource dataSource;
-    private final ExecutorService executorService;
-    private final int batchSize;
-    private final int threadPoolSize;
-    private final AtomicInteger totalProcessed = new AtomicInteger(0);
-    private final AtomicLong totalProcessingTime = new AtomicLong(0);
-    private final ThreadLocal<StringBuilder> queryBuilder;
-    private final ThreadLocal<JdbcTemplate> jdbcTemplate;
+    EXECUTE IMMEDIATE 'CREATE TABLE ' || v_result_table || ' (
+        comparison_type VARCHAR2(20),
+        record_status VARCHAR2(50),
+        column_name VARCHAR2(100),
+        dev_value CLOB,
+        prod_value CLOB,
+        primary_key_info VARCHAR2(4000)
+    )';
 
-    @Autowired
-    public EnhancedManualJDBCBatchItemWriter(
-            @Qualifier("batchDataSource") DataSource dataSource,
-            String sqlTemplate, 
-            @Value("${batch.size:1000}") int batchSize,
-            @Value("${batch.thread.pool.size:#{T(java.lang.Runtime).getRuntime().availableProcessors()}}") 
-            int threadPoolSize) {
-        
-        this.sqlTemplate = sqlTemplate;
-        this.dataSource = (HikariDataSource) dataSource;
-        this.batchSize = batchSize;
-        this.threadPoolSize = threadPoolSize;
-        
-        // Initialize thread pool with custom configuration
-        this.executorService = new ThreadPoolExecutor(
-            threadPoolSize,            // Core pool size
-            threadPoolSize,            // Maximum pool size
-            60L,                       // Keep alive time
-            TimeUnit.SECONDS,
-            new LinkedBlockingQueue<>(2000),  // Queue capacity
-            new ThreadFactory() {
-                private final AtomicInteger threadCount = new AtomicInteger(1);
-                @Override
-                public Thread newThread(Runnable r) {
-                    Thread thread = new Thread(r);
-                    thread.setName("BatchWriter-" + threadCount.getAndIncrement());
-                    thread.setDaemon(true);
-                    return thread;
-                }
-            },
-            new ThreadPoolExecutor.CallerRunsPolicy()  // Rejection policy
-        );
+    -- Get column lists from both tables
+    SELECT LISTAGG(column_name, ',') WITHIN GROUP (ORDER BY column_id)
+    INTO v_dev_columns
+    FROM ALL_TAB_COLUMNS@&p_dev_db_link
+    WHERE table_name = UPPER(p_dev_table);
 
-        // Initialize thread local resources
-        this.queryBuilder = ThreadLocal.withInitial(() -> new StringBuilder(1024));
-        this.jdbcTemplate = ThreadLocal.withInitial(() -> {
-            JdbcTemplate template = new JdbcTemplate(dataSource);
-            template.setFetchSize(batchSize);
-            template.setBatchSize(batchSize);
-            return template;
-        });
-    }
+    SELECT LISTAGG(column_name, ',') WITHIN GROUP (ORDER BY column_id)
+    INTO v_prod_columns
+    FROM ALL_TAB_COLUMNS@&p_prod_db_link
+    WHERE table_name = UPPER(p_prod_table);
 
-    public synchronized void setSqlTemplate(String sqlTemplate) {
-        if (sqlTemplate == null || sqlTemplate.trim().isEmpty()) {
-            throw new IllegalArgumentException("SQL template cannot be null or empty");
-        }
-        this.sqlTemplate = sqlTemplate;
-    }
+    -- Get primary key columns
+    WITH pk_columns AS (
+        SELECT cols.column_name
+        FROM ALL_CONSTRAINTS@&p_dev_db_link cons
+        JOIN ALL_CONS_COLUMNS@&p_dev_db_link cols ON cons.constraint_name = cols.constraint_name
+        WHERE cons.table_name = UPPER(p_dev_table)
+        AND cons.constraint_type = 'P'
+    )
+    SELECT LISTAGG(column_name, ',') WITHIN GROUP (ORDER BY column_name)
+    INTO v_common_cols
+    FROM pk_columns;
 
-    @Override
-    public void write(Chunk<? extends EntityRecord> items) throws Exception {
-        long startTime = System.currentTimeMillis();
-        
-        // Split items into sub-batches for parallel processing
-        List<List<EntityRecord>> batches = splitIntoBatches(items);
-        List<CompletableFuture<Void>> futures = new ArrayList<>();
+    -- If no PK found, use all common columns
+    IF v_common_cols IS NULL THEN
+        WITH dev_cols AS (
+            SELECT column_name, data_type
+            FROM ALL_TAB_COLUMNS@&p_dev_db_link
+            WHERE table_name = UPPER(p_dev_table)
+        ),
+        prod_cols AS (
+            SELECT column_name, data_type
+            FROM ALL_TAB_COLUMNS@&p_prod_db_link
+            WHERE table_name = UPPER(p_prod_table)
+        )
+        SELECT LISTAGG(dev_cols.column_name, ',') WITHIN GROUP (ORDER BY dev_cols.column_name)
+        INTO v_common_cols
+        FROM dev_cols
+        JOIN prod_cols ON dev_cols.column_name = prod_cols.column_name
+        AND dev_cols.data_type = prod_cols.data_type;
+    END IF;
 
-        // Process each batch in parallel
-        for (List<EntityRecord> batch : batches) {
-            CompletableFuture<Void> future = CompletableFuture.runAsync(
-                () -> processBatch(batch),
-                executorService
-            ).exceptionally(throwable -> {
-                logger.severe("Batch processing failed: " + throwable.getMessage());
-                throw new CompletionException(throwable);
-            });
-            futures.add(future);
-        }
+    -- Compare structure
+    INSERT INTO TABLE_COMPARISON_RESULTS
+    WITH dev_columns AS (
+        SELECT column_name, data_type, data_length
+        FROM ALL_TAB_COLUMNS@&p_dev_db_link
+        WHERE table_name = UPPER(p_dev_table)
+    ),
+    prod_columns AS (
+        SELECT column_name, data_type, data_length
+        FROM ALL_TAB_COLUMNS@&p_prod_db_link
+        WHERE table_name = UPPER(p_prod_table)
+    )
+    SELECT 'STRUCTURE' as comparison_type,
+           CASE 
+               WHEN prod.column_name IS NULL THEN 'MISSING IN PROD'
+               WHEN dev.column_name IS NULL THEN 'MISSING IN DEV'
+               WHEN dev.data_type != prod.data_type OR dev.data_length != prod.data_length 
+                    THEN 'DIFFERENT DEFINITION'
+           END as record_status,
+           COALESCE(dev.column_name, prod.column_name) as column_name,
+           dev.data_type || '(' || dev.data_length || ')' as dev_value,
+           prod.data_type || '(' || prod.data_length || ')' as prod_value,
+           NULL as primary_key_info
+    FROM dev_columns dev
+    FULL OUTER JOIN prod_columns prod ON dev.column_name = prod.column_name
+    WHERE dev.column_name IS NULL 
+       OR prod.column_name IS NULL
+       OR dev.data_type != prod.data_type 
+       OR dev.data_length != prod.data_length;
 
-        try {
-            // Wait for all batches to complete with timeout
-            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
-                .get(5, TimeUnit.MINUTES);
-                
-            // Update metrics
-            long duration = System.currentTimeMillis() - startTime;
-            totalProcessingTime.addAndGet(duration);
-            int processed = totalProcessed.addAndGet(items.size());
-            
-            logPerformanceMetrics(items.size(), duration, processed);
-            
-        } catch (TimeoutException e) {
-            logger.severe("Batch processing timed out after 5 minutes");
-            throw new RuntimeException("Batch processing timeout", e);
-        }
-    }
+    -- Compare data
+    v_dynamic_sql := '
+    INSERT INTO ' || v_result_table || '
+    WITH dev_data AS (
+        SELECT ' || v_common_cols || ', 
+               ROWTOHEX(CAST(DBMS_CRYPTO.HASH(
+                   UTL_RAW.CAST_TO_RAW(CONVERT(TO_CHAR(' || 
+                   REPLACE(v_dev_columns, ',', ' || '','' || ') || 
+                   '), ''AL32UTF8'', ''US7ASCII'')), 2) AS RAW(2000))) as row_hash
+        FROM ' || p_dev_table || '@' || p_dev_db_link || '
+    ),
+    prod_data AS (
+        SELECT ' || v_common_cols || ',
+               ROWTOHEX(CAST(DBMS_CRYPTO.HASH(
+                   UTL_RAW.CAST_TO_RAW(CONVERT(TO_CHAR(' || 
+                   REPLACE(v_prod_columns, ',', ' || '','' || ') || 
+                   '), ''AL32UTF8'', ''US7ASCII'')), 2) AS RAW(2000))) as row_hash
+        FROM ' || p_prod_table || '@' || p_prod_db_link || '
+    )
+    SELECT ''DATA'' as comparison_type,
+           CASE 
+               WHEN prod.row_hash IS NULL THEN ''MISSING IN PROD''
+               WHEN dev.row_hash IS NULL THEN ''MISSING IN DEV''
+               WHEN dev.row_hash != prod.row_hash THEN ''DIFFERENT VALUES''
+           END as record_status,
+           NULL as column_name,
+           CASE WHEN dev.' || REPLACE(v_common_cols, ',', ' IS NOT NULL THEN dev.') || ' END as dev_value,
+           CASE WHEN prod.' || REPLACE(v_common_cols, ',', ' IS NOT NULL THEN prod.') || ' END as prod_value,
+           ''PK: '' || ' || REPLACE(v_common_cols, ',', ' || '','''' || ') || ' as primary_key_info
+    FROM dev_data dev
+    FULL OUTER JOIN prod_data prod ON ' || 
+    REPLACE(v_common_cols, ',', ' = prod.') || '
+    WHERE dev.row_hash IS NULL 
+       OR prod.row_hash IS NULL
+       OR dev.row_hash != prod.row_hash';
 
-    private void processBatch(List<EntityRecord> batch) {
-        List<String> queries = new ArrayList<>(batch.size());
-        StringBuilder builder = queryBuilder.get();
-        JdbcTemplate template = jdbcTemplate.get();
+    EXECUTE IMMEDIATE v_dynamic_sql;
 
-        try {
-            for (EntityRecord record : batch) {
-                builder.setLength(0);
-                queries.add(buildQuery(record, builder));
-                
-                if (queries.size() >= batchSize) {
-                    executeBatchQueriesWithRetry(template, queries);
-                    queries.clear();
-                }
-            }
+    -- Output summary
+    DBMS_OUTPUT.PUT_LINE('Comparison completed. Results stored in ' || v_result_table);
+    DBMS_OUTPUT.PUT_LINE('To view results, run: SELECT * FROM ' || v_result_table || ' ORDER BY comparison_type, record_status;');
 
-            if (!queries.isEmpty()) {
-                executeBatchQueriesWithRetry(template, queries);
-            }
-        } catch (Exception e) {
-            logger.log(Level.SEVERE, "Error processing batch", e);
-            throw new RuntimeException("Batch processing failed", e);
-        }
-    }
+EXCEPTION
+    WHEN OTHERS THEN
+        DBMS_OUTPUT.PUT_LINE('Error: ' || SQLERRM);
+        RAISE;
+END COMPARE_TABLES;
+/
 
-    private String buildQuery(EntityRecord record, StringBuilder builder) {
-        builder.append(sqlTemplate);
-        
-        try {
-            for (FieldData data : record.getFieldData()) {
-                String sqlValue = data.getSQLString()
-                    .replace("\\", "\\\\")
-                    .replace("$", "\\$");
-                
-                int index;
-                while ((index = builder.indexOf("?")) != -1) {
-                    builder.replace(index, index + 1, sqlValue);
-                }
-            }
-            
-            // Remove trailing comma if present
-            if (builder.charAt(builder.length() - 1) == ',') {
-                builder.setLength(builder.length() - 1);
-            }
-            
-            return builder.toString();
-            
-        } catch (Exception e) {
-            logger.severe("Query building failed for record: " + e.getMessage());
-            throw new RuntimeException("Failed to build query", e);
-        }
-    }
+-- Example usage:
+-- EXEC COMPARE_TABLES('DEV_LINK', 'EMPLOYEES', 'PROD_LINK', 'EMPLOYEES');
 
-    private void executeBatchQueriesWithRetry(JdbcTemplate template, List<String> queries) {
-        int retryCount = 0;
-        int maxRetries = 3;
-        long retryDelayMs = 1000; // Initial delay of 1 second
-        
-        while (retryCount < maxRetries) {
-            try {
-                template.batchUpdate(queries.toArray(new String[0]));
-                return;
-            } catch (Exception e) {
-                retryCount++;
-                if (retryCount == maxRetries) {
-                    logger.severe("Batch execution failed after " + maxRetries + " retries");
-                    throw new RuntimeException("Failed to execute batch", e);
-                }
-                logger.warning("Retry " + retryCount + " after batch execution failure");
-                
-                try {
-                    // Exponential backoff
-                    Thread.sleep(retryDelayMs * retryCount);
-                } catch (InterruptedException ie) {
-                    Thread.currentThread().interrupt();
-                    throw new RuntimeException("Retry interrupted", ie);
-                }
-            }
-        }
-    }
-
-    private List<List<EntityRecord>> splitIntoBatches(Chunk<? extends EntityRecord> items) {
-        List<List<EntityRecord>> batches = new ArrayList<>();
-        List<EntityRecord> currentBatch = new ArrayList<>();
-        
-        for (EntityRecord item : items) {
-            currentBatch.add(item);
-            if (currentBatch.size() >= batchSize) {
-                batches.add(new ArrayList<>(currentBatch));
-                currentBatch.clear();
-            }
-        }
-        
-        if (!currentBatch.isEmpty()) {
-            batches.add(currentBatch);
-        }
-        
-        return batches;
-    }
-
-    private void logPerformanceMetrics(int batchSize, long duration, int totalProcessed) {
-        double avgTimePerRecord = totalProcessingTime.get() / (double) totalProcessed;
-        ThreadPoolExecutor executor = (ThreadPoolExecutor) executorService;
-        
-        logger.info(String.format(
-            "Batch metrics - Size: %d, Duration: %dms, Total: %d, Avg time per record: %.2fms\n" +
-            "Thread pool - Active: %d, Pool size: %d, Queue size: %d",
-            batchSize, duration, totalProcessed, avgTimePerRecord,
-            executor.getActiveCount(),
-            executor.getPoolSize(),
-            executor.getQueue().size()
-        ));
-
-        // Log connection pool metrics if available
-        if (dataSource != null && dataSource.getHikariPoolMXBean() != null) {
-            logger.info(String.format(
-                "Connection pool - Active: %d, Idle: %d, Total: %d, Waiting: %d",
-                dataSource.getHikariPoolMXBean().getActiveConnections(),
-                dataSource.getHikariPoolMXBean().getIdleConnections(),
-                dataSource.getHikariPoolMXBean().getTotalConnections(),
-                dataSource.getHikariPoolMXBean().getThreadsAwaitingConnection()
-            ));
-        }
-    }
-
-    @Override
-    public void close() {
-        boolean terminated = false;
-        executorService.shutdown();
-        try {
-            // Wait for existing tasks to terminate
-            terminated = executorService.awaitTermination(60, TimeUnit.SECONDS);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        } finally {
-            if (!terminated) {
-                executorService.shutdownNow();
-            }
-        }
-        
-        // Clean up thread locals
-        queryBuilder.remove();
-        jdbcTemplate.remove();
-        
-        logger.info("Writer closed. Processed total records: " + totalProcessed.get());
-    }
-}
-
-// application.properties file
-
-# Existing configurations
-server.servlet.context-path=/api/entity-service
-spring.application.name=entity-service
-spring.batch.job.enabled=false
-
-# JPA and Database Configuration
-spring.jpa.hibernate.ddl-auto=none
-spring.datasource.driver-class-name=oracle.jdbc.OracleDriver
-spring.jpa.show-sql= true
-spring.transaction.default-timeout=120
-spring.datasource.url=${ENTITY_DATASOURCE_URL}
-spring.datasource.username=${ENTITY_DATASOURCE_USERNAME}
-spring.datasource.password=${ENTITY_DATASOURCE_PASSWORD}
-
-# Server SSL Configuration
-server.port=8443
-server.ssl.keystore=${KEYSTORE_FILE}
-server.ssl.key-store-password=${KEYSTORE_PASS}
-server.ssl.key-store-type=${KEYSTORE_TYPE}
-server.ssl.key-alias=${KEYSTORE_ALIAS}
-server.ssl.key-password=${KEYSTORE_PASS}
-
-# CORS Configuration
-cors.allowed.origins=http://entity-ui-sbse-als-dev.apps.ecpdevtest.tcc.abc.gov
-
-# New HikariCP Connection Pool Configuration
-spring.datasource.hikari.maximum-pool-size=20
-spring.datasource.hikari.minimum-idle=5
-spring.datasource.hikari.idle-timeout=300000
-spring.datasource.hikari.connection-timeout=20000
-spring.datasource.hikari.max-lifetime=1200000
-spring.datasource.hikari.auto-commit=true
-spring.datasource.hikari.validation-timeout=5000
-
-# Batch Processing Configuration
-batch.size=1000
-batch.thread.pool.size=8
-batch.chunk.size=500
-batch.retry.max.attempts=3
-batch.retry.backoff.period=1000
-
-# Performance Tuning
-spring.jpa.properties.hibernate.jdbc.batch_size=50
-spring.jpa.properties.hibernate.order_inserts=true
-spring.jpa.properties.hibernate.order_updates=true
-spring.jpa.properties.hibernate.batch_versioned_data=true
-spring.jpa.properties.hibernate.jdbc.batch_versioned_data=true
-spring.jpa.properties.hibernate.connection.provider_disables_autocommit=true
-
-# Statement Caching
-spring.datasource.hikari.data-source-properties.cachePrepStmts=true
-spring.datasource.hikari.data-source-properties.prepStmtCacheSize=250
-spring.datasource.hikari.data-source-properties.prepStmtCacheSqlLimit=2048
-spring.datasource.hikari.data-source-properties.useServerPrepStmts=true
-
-# Logging Configuration
-logging.level.com.abc.sbse.os.ts.csp.alsentity=INFO
-logging.level.org.springframework.jdbc.core=DEBUG
-logging.level.com.zaxxer.hikari=INFO
+-- To view results:
+-- SELECT * FROM TABLE_COMPARISON_RESULTS ORDER BY comparison_type, record_status;
