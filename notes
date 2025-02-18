@@ -1,199 +1,455 @@
-CREATE OR REPLACE PROCEDURE COMPARE_TABLES (
-    p_dev_db_link    IN VARCHAR2,
-    p_dev_table      IN VARCHAR2,
-    p_prod_db_link   IN VARCHAR2,
-    p_prod_table     IN VARCHAR2
-)
-AS
-    v_dev_columns    VARCHAR2(4000);
-    v_prod_columns   VARCHAR2(4000);
-    v_common_cols    VARCHAR2(4000);
-    v_dynamic_sql    VARCHAR2(32767);
-    v_result_table   VARCHAR2(30) := 'TABLE_COMPARISON_RESULTS';
-BEGIN
-    -- Create result table if it doesn't exist
-    BEGIN
-        EXECUTE IMMEDIATE 'DROP TABLE ' || v_result_table;
-    EXCEPTION
-        WHEN OTHERS THEN NULL;
-    END;
+# Extract Processing Service - Developer Guide
+
+## Overview
+This document provides implementation details for the Extract Processing Service, a Spring Boot WebAPI that manages and executes daily and weekly extract jobs. The service is designed to be flexible, configurable, and can be triggered both manually via REST endpoints and automatically through Control-M scheduling.
+
+## System Architecture
+
+### Components
+1. **REST API Layer**: Handles incoming HTTP requests to trigger extract jobs
+2. **Service Layer**: Contains business logic for processing different types of extracts
+3. **Configuration Layer**: Manages extract configurations through application properties
+4. **Execution Layer**: Handles the actual running of extract jobs
+
+### Technology Stack
+- Spring Boot 3.x
+- Java 17+
+- Maven/Gradle
+- Spring Scheduler (for local testing)
+
+## Configuration
+
+### Application Properties
+```properties
+# Extract Configurations
+extracts.daily.order=E5,E3,E8,E7,E8
+extracts.weekly.order=S1,E1,E2,E4,EA,E9
+extracts.monthly.order=E6
+
+# Extract Job Paths/Commands
+extracts.base.path=/path/to/extract/scripts
+extracts.E5.command=./run_extract_E5.sh
+extracts.E3.command=./run_extract_E3.sh
+# ... Add other extract commands
+
+# Logging Configuration
+logging.level.com.company.extractservice=INFO
+logging.file.name=extract-service.log
+```
+
+## API Endpoints
+
+### 1. Trigger Extract Job
+```
+POST /api/v1/extracts/run
+```
+
+Request Body:
+```json
+{
+    "type": "DAILY",  // or "WEEKLY"
+    "requestId": "unique-request-id",
+    "force": false    // override if already running
+}
+```
+
+Response:
+```json
+{
+    "status": "ACCEPTED",
+    "jobId": "job-123",
+    "message": "Extract job started successfully"
+}
+```
+
+### 2. Check Job Status
+```
+GET /api/v1/extracts/status/{jobId}
+```
+
+## OpenShift-Specific Implementation Details
+
+When running in OpenShift, the service needs to be adapted to handle YAML configurations:
+
+```java
+@Configuration
+@ConfigurationProperties(prefix = "extracts")
+public class ExtractConfig {
+    private Map<String, String> daily;
+    private Map<String, String> weekly;
+    private ControlMConfig controlM;
     
-    EXECUTE IMMEDIATE 'CREATE TABLE ' || v_result_table || ' (
-        comparison_type VARCHAR2(20),
-        record_status VARCHAR2(50),
-        column_name VARCHAR2(100),
-        dev_value CLOB,
-        prod_value CLOB,
-        primary_key_info VARCHAR2(4000)
-    )';
+    // Getters and setters
+}
 
-    -- Get column lists from both tables
-    SELECT LISTAGG(column_name, ',') WITHIN GROUP (ORDER BY column_id)
-    INTO v_dev_columns
-    FROM ALL_TAB_COLUMNS@&p_dev_db_link
-    WHERE table_name = UPPER(p_dev_table);
-
-    SELECT LISTAGG(column_name, ',') WITHIN GROUP (ORDER BY column_id)
-    INTO v_prod_columns
-    FROM ALL_TAB_COLUMNS@&p_prod_db_link
-    WHERE table_name = UPPER(p_prod_table);
-
-    -- Get primary key columns
-    WITH pk_columns AS (
-        SELECT cols.column_name
-        FROM ALL_CONSTRAINTS@&p_dev_db_link cons
-        JOIN ALL_CONS_COLUMNS@&p_dev_db_link cols ON cons.constraint_name = cols.constraint_name
-        WHERE cons.table_name = UPPER(p_dev_table)
-        AND cons.constraint_type = 'P'
-    )
-    SELECT LISTAGG(column_name, ',') WITHIN GROUP (ORDER BY column_name)
-    INTO v_common_cols
-    FROM pk_columns;
-
-    -- If no PK found, use all common columns
-    IF v_common_cols IS NULL THEN
-        WITH dev_cols AS (
-            SELECT column_name, data_type
-            FROM ALL_TAB_COLUMNS@&p_dev_db_link
-            WHERE table_name = UPPER(p_dev_table)
-        ),
-        prod_cols AS (
-            SELECT column_name, data_type
-            FROM ALL_TAB_COLUMNS@&p_prod_db_link
-            WHERE table_name = UPPER(p_prod_table)
-        )
-        SELECT LISTAGG(dev_cols.column_name, ',') WITHIN GROUP (ORDER BY dev_cols.column_name)
-        INTO v_common_cols
-        FROM dev_cols
-        JOIN prod_cols ON dev_cols.column_name = prod_cols.column_name
-        AND dev_cols.data_type = prod_cols.data_type;
-    END IF;
-
-    -- Compare structure
-    INSERT INTO TABLE_COMPARISON_RESULTS
-    WITH dev_columns AS (
-        SELECT column_name, data_type, data_length
-        FROM ALL_TAB_COLUMNS@&p_dev_db_link
-        WHERE table_name = UPPER(p_dev_table)
-    ),
-    prod_columns AS (
-        SELECT column_name, data_type, data_length
-        FROM ALL_TAB_COLUMNS@&p_prod_db_link
-        WHERE table_name = UPPER(p_prod_table)
-    )
-    SELECT 'STRUCTURE' as comparison_type,
-           CASE 
-               WHEN prod.column_name IS NULL THEN 'MISSING IN PROD'
-               WHEN dev.column_name IS NULL THEN 'MISSING IN DEV'
-               WHEN dev.data_type != prod.data_type OR dev.data_length != prod.data_length 
-                    THEN 'DIFFERENT DEFINITION'
-           END as record_status,
-           COALESCE(dev.column_name, prod.column_name) as column_name,
-           dev.data_type || '(' || dev.data_length || ')' as dev_value,
-           prod.data_type || '(' || prod.data_length || ')' as prod_value,
-           NULL as primary_key_info
-    FROM dev_columns dev
-    FULL OUTER JOIN prod_columns prod ON dev.column_name = prod.column_name
-    WHERE dev.column_name IS NULL 
-       OR prod.column_name IS NULL
-       OR dev.data_type != prod.data_type 
-       OR dev.data_length != prod.data_length;
-
-    -- Compare data
-    v_dynamic_sql := '
-    INSERT INTO ' || v_result_table || '
-    WITH dev_data AS (
-        SELECT ' || v_common_cols || ', 
-               ROWTOHEX(CAST(DBMS_CRYPTO.HASH(
-                   UTL_RAW.CAST_TO_RAW(CONVERT(TO_CHAR(' || 
-                   REPLACE(v_dev_columns, ',', ' || '','' || ') || 
-                   '), ''AL32UTF8'', ''US7ASCII'')), 2) AS RAW(2000))) as row_hash
-        FROM ' || p_dev_table || '@' || p_dev_db_link || '
-    ),
-    prod_data AS (
-        SELECT ' || v_common_cols || ',
-               ROWTOHEX(CAST(DBMS_CRYPTO.HASH(
-                   UTL_RAW.CAST_TO_RAW(CONVERT(TO_CHAR(' || 
-                   REPLACE(v_prod_columns, ',', ' || '','' || ') || 
-                   '), ''AL32UTF8'', ''US7ASCII'')), 2) AS RAW(2000))) as row_hash
-        FROM ' || p_prod_table || '@' || p_prod_db_link || '
-    )
-    SELECT ''DATA'' as comparison_type,
-           CASE 
-               WHEN prod.row_hash IS NULL THEN ''MISSING IN PROD''
-               WHEN dev.row_hash IS NULL THEN ''MISSING IN DEV''
-               WHEN dev.row_hash != prod.row_hash THEN ''DIFFERENT VALUES''
-           END as record_status,
-           NULL as column_name,
-           CASE WHEN dev.' || REPLACE(v_common_cols, ',', ' IS NOT NULL THEN dev.') || ' END as dev_value,
-           CASE WHEN prod.' || REPLACE(v_common_cols, ',', ' IS NOT NULL THEN prod.') || ' END as prod_value,
-           ''PK: '' || ' || REPLACE(v_common_cols, ',', ' || '','''' || ') || ' as primary_key_info
-    FROM dev_data dev
-    FULL OUTER JOIN prod_data prod ON ' || 
-    REPLACE(v_common_cols, ',', ' = prod.') || '
-    WHERE dev.row_hash IS NULL 
-       OR prod.row_hash IS NULL
-       OR dev.row_hash != prod.row_hash';
-
-    EXECUTE IMMEDIATE v_dynamic_sql;
-
-    -- Output summary
-    DBMS_OUTPUT.PUT_LINE('Comparison completed. Results stored in ' || v_result_table);
-    DBMS_OUTPUT.PUT_LINE('To view results, run: SELECT * FROM ' || v_result_table || ' ORDER BY comparison_type, record_status;');
-
-EXCEPTION
-    WHEN OTHERS THEN
-        DBMS_OUTPUT.PUT_LINE('Error: ' || SQLERRM);
-        RAISE;
-END COMPARE_TABLES;
-/
-
--- Example usage:
--- EXEC COMPARE_TABLES('DEV_LINK', 'EMPLOYEES', 'PROD_LINK', 'EMPLOYEES');
-
--- To view results:
--- SELECT * FROM TABLE_COMPARISON_RESULTS ORDER BY comparison_type, record_status;
-
-
-///
-
-
-I've created a comprehensive stored procedure that will compare tables between Dev and Prod environments. Here are the key features:
-
-1. Structure Comparison:
-   - Identifies columns that exist in one environment but not the other
-   - Compares data types and lengths
-   - Highlights any differences in column definitions
-
-2. Data Comparison:
-   - Uses primary keys if available, otherwise uses all matching columns
-   - Identifies missing records in either environment
-   - Detects differences in values
-   - Creates row-level hashes to efficiently identify differences
-
-3. Results Storage:
-   - Creates a result table named TABLE_COMPARISON_RESULTS
-   - Stores both structure and data differences
-   - Includes detailed information about the differences found
-
-To use the procedure:
-
-1. First, ensure you have the necessary database links set up between Dev and Prod
-2. Run the procedure with your parameters:
-```sql
-EXEC COMPARE_TABLES('DEV_LINK', 'YOUR_TABLE', 'PROD_LINK', 'YOUR_TABLE');
-```
-3. View the results:
-```sql
-SELECT * FROM TABLE_COMPARISON_RESULTS ORDER BY comparison_type, record_status;
+@Configuration
+@ConfigurationProperties(prefix = "control-m")
+public class ControlMConfig {
+    private boolean enabled;
+    private String endpoint;
+    private AuthConfig auth;
+    
+    // Getters and setters
+}
 ```
 
-The results table contains these columns:
-- comparison_type: 'STRUCTURE' or 'DATA'
-- record_status: Indicates the type of difference found
-- column_name: Relevant for structure differences
-- dev_value: Value in Dev environment
-- prod_value: Value in Prod environment
-- primary_key_info: Primary key values for data differences
+### OpenShift Environment Detection
+```java
+@Component
+public class EnvironmentDetector {
+    private final boolean isOpenShift;
+    
+    public EnvironmentDetector() {
+        this.isOpenShift = System.getenv("OPENSHIFT_BUILD_NAME") != null;
+    }
+    
+    public boolean isOpenShiftEnvironment() {
+        return isOpenShift;
+    }
+}
+```
 
-Would you like me to explain any specific part in more detail or make any modifications to the procedure?
+## Standard Implementation Details
+
+### Core Classes
+
+#### 1. Extract Controller
+```java
+@RestController
+@RequestMapping("/api/v1/extracts")
+public class ExtractController {
+    @PostMapping("/run")
+    public ResponseEntity<JobResponse> runExtract(@RequestBody ExtractRequest request) {
+        // Implementation
+    }
+    
+    @GetMapping("/status/{jobId}")
+    public ResponseEntity<JobStatus> getStatus(@PathVariable String jobId) {
+        // Implementation
+    }
+}
+```
+
+#### 2. Extract Service
+```java
+@Service
+@Slf4j
+public class ExtractService {
+    @Value("${extracts.daily.order}")
+    private String dailyOrder;
+    
+    @Value("${extracts.weekly.order}")
+    private String weeklyOrder;
+    
+    public JobResponse processExtract(ExtractRequest request) {
+        String[] extractOrder = getExtractOrder(request.getType());
+        // Implementation
+    }
+    
+    private String[] getExtractOrder(ExtractType type) {
+        return switch(type) {
+            case DAILY -> dailyOrder.split(",");
+            case WEEKLY -> weeklyOrder.split(",");
+            default -> throw new IllegalArgumentException("Invalid extract type");
+        };
+    }
+}
+```
+
+## OpenShift Deployment
+
+### OpenShift Configuration
+When deploying to OpenShift with Control-M integration, the service requires specific YAML configurations:
+
+1. **Deployment YAML**
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: extract-service
+  namespace: extract-processing
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: extract-service
+  template:
+    metadata:
+      labels:
+        app: extract-service
+    spec:
+      containers:
+      - name: extract-service
+        image: ${REGISTRY}/extract-service:${TAG}
+        ports:
+        - containerPort: 8080
+        envFrom:
+        - configMapRef:
+            name: extract-service-config
+        volumeMounts:
+        - name: extract-config
+          mountPath: /app/config
+        - name: extract-scripts
+          mountPath: /app/scripts
+      volumes:
+      - name: extract-config
+        configMap:
+          name: extract-service-config
+      - name: extract-scripts
+        persistentVolumeClaim:
+          claimName: extract-scripts-pvc
+```
+
+2. **ConfigMap YAML**
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: extract-service-config
+  namespace: extract-processing
+data:
+  application.yaml: |
+    extracts:
+      daily:
+        order: E5,E3,E8,E7,E8
+      weekly:
+        order: S1,E1,E2,E4,EA,E9
+      monthly:
+        order: E6
+    
+    control-m:
+      enabled: true
+      endpoint: https://controlm-api:8443/automation-api
+      auth:
+        username: ${CONTROLM_USER}
+        password: ${CONTROLM_PASSWORD}
+    
+    logging:
+      level:
+        com.company.extractservice: INFO
+      file:
+        name: /var/log/extract-service.log
+```
+
+3. **Service YAML**
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: extract-service
+  namespace: extract-processing
+spec:
+  selector:
+    app: extract-service
+  ports:
+  - port: 8080
+    targetPort: 8080
+  type: ClusterIP
+```
+
+4. **Route YAML (for OpenShift)**
+```yaml
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: extract-service
+  namespace: extract-processing
+spec:
+  to:
+    kind: Service
+    name: extract-service
+  tls:
+    termination: edge
+```
+
+### Control-M Integration in OpenShift
+
+When running in OpenShift, Control-M jobs need to be configured to use the OpenShift route:
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: control-m-jobs
+  namespace: extract-processing
+data:
+  daily-extract.json: |
+    {
+      "jobName": "EXTRACT_SERVICE_DAILY",
+      "command": "curl -X POST https://extract-service-route.apps.openshift.com/api/v1/extracts/run -H \"Content-Type: application/json\" -H \"X-API-Key: ${API_KEY}\" -d '{\"type\":\"DAILY\",\"requestId\":\"%%JOBID%%\"}'",
+      "schedule": "EVERYDAY",
+      "time": "01:00",
+      "runAs": "extract-service",
+      "application": "ExtractProcessing",
+      "subApplication": "DailyExtracts"
+    }
+```
+
+### OpenShift-Specific Considerations
+
+1. **Resource Limits**
+```yaml
+resources:
+  requests:
+    memory: "512Mi"
+    cpu: "250m"
+  limits:
+    memory: "1Gi"
+    cpu: "500m"
+```
+
+2. **Health Checks**
+```yaml
+livenessProbe:
+  httpGet:
+    path: /actuator/health/liveness
+    port: 8080
+  initialDelaySeconds: 60
+  periodSeconds: 10
+readinessProbe:
+  httpGet:
+    path: /actuator/health/readiness
+    port: 8080
+  initialDelaySeconds: 30
+  periodSeconds: 10
+```
+
+3. **Security Context**
+```yaml
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+```
+
+## Standard Deployment
+
+### Local Development
+1. Clone the repository
+2. Configure application.properties
+3. Run using Maven:
+```bash
+mvn spring-boot:run
+```
+
+### Production Deployment
+1. Build the JAR:
+```bash
+mvn clean package
+```
+
+2. Deploy to server:
+```bash
+java -jar extract-service.jar --spring.config.location=file:/path/to/application.properties
+```
+
+### Control-M Integration
+
+#### Job Configuration
+```bash
+# Control-M Job Definition
+JOBNAME: EXTRACT_SERVICE_DAILY
+COMMAND: curl -X POST http://extract-service:8080/api/v1/extracts/run -H "Content-Type: application/json" -d '{"type":"DAILY","requestId":"%%JOBID%%"}'
+SCHEDULE: EVERYDAY
+TIME: 01:00
+```
+
+## Error Handling
+
+The service implements the following error handling:
+1. **Concurrent Execution Protection**: Prevents multiple instances of the same extract type running simultaneously
+2. **Job Monitoring**: Tracks job status and provides detailed error information
+3. **Retry Mechanism**: Configurable retry policy for failed extracts
+
+## Monitoring
+
+### Metrics
+The service exposes the following metrics through Spring Actuator:
+- extract_job_duration_seconds
+- extract_job_success_total
+- extract_job_failure_total
+
+### Logging
+Implements structured logging with the following information:
+- Request ID
+- Extract Type
+- Start/End Time
+- Status
+- Error Details (if any)
+
+## Security
+
+### API Security
+1. Implement API key authentication:
+```java
+@Configuration
+public class SecurityConfig {
+    @Bean
+    public SecurityFilterChain filterChain(HttpSecurity http) {
+        http.csrf().disable()
+            .authorizeRequests()
+            .requestMatchers("/api/v1/extracts/**").hasRole("EXTRACT_ADMIN")
+            .anyRequest().authenticated()
+            .and()
+            .addFilter(new ApiKeyAuthFilter());
+        return http.build();
+    }
+}
+```
+
+2. Configure CORS and rate limiting as needed
+
+## Testing
+
+### Unit Tests
+```java
+@SpringBootTest
+class ExtractServiceTest {
+    @Test
+    void whenDailyExtractRequested_thenCorrectOrderIsProcessed() {
+        // Test implementation
+    }
+}
+```
+
+### Integration Tests
+Provide Postman collection for API testing:
+```json
+{
+    "name": "Extract Service Tests",
+    "requests": [
+        {
+            "name": "Run Daily Extract",
+            "method": "POST",
+            "url": "{{base_url}}/api/v1/extracts/run",
+            "body": {
+                "type": "DAILY",
+                "requestId": "test-123"
+            }
+        }
+    ]
+}
+```
+
+## Troubleshooting
+
+Common issues and solutions:
+1. **Job Hanging**: Implement timeout mechanism
+2. **Extract Order Mismatch**: Validate configuration at startup
+3. **Control-M Integration Issues**: Proper error handling and logging
+
+## Best Practices
+
+1. Always use request IDs for tracking
+2. Implement circuit breakers for external dependencies
+3. Use appropriate timeout values
+4. Maintain comprehensive logging
+5. Regular monitoring of job execution times
+6. Implement proper cleanup of temporary files
+7. Regular backup of configuration
+
+## Contact
+
+For questions or issues:
+- Team: Extract Processing Team
+- Email: extract-team@company.com
+- Slack: #extract-service-support
