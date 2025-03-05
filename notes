@@ -1,33 +1,141 @@
-Subject: Request to Mount Shared Drive in OpenShift Environment
+import java.io.BufferedReader;
+import java.io.FileReader;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
-Dear DevOps Team,
-
-I am writing to request assistance with mounting a shared drive folder to our OpenShift environment. Our application needs access to specific data located on the shared drive to function properly.
-
-Request Details:
-- Purpose: [Specific application name] needs to access [type of data/files] on the shared drive
-- OpenShift Environment: [Development/Testing/Production]
-- Shared Drive Details:
-  * Server/hostname: [hostname]
-  * Protocol: [NFS/SMB/CIFS]
-  * Path to folder: [/path/to/folder]
-  * Authentication requirements: [Any credentials or authentication method needed]
-- Access Requirements: [Read-only or Read-write]
-- Service Account: Request for a dedicated service account to be created for this purpose
-- Timeline: [When this access is needed by]
-
-Business Justification:
-[Our application needs to process files that are regularly updated on the shared drive]
-[The shared folder contains essential reference data that our service needs to function]
-[We need to write output files to a location accessible by other systems]
-
-This mount is critical for our application to [specific business function], which supports [specific business objective or requirement]. Without this access, we would be unable to [specific consequence of not having access].
-
-Please let me know if you need any additional information to process this request. I'm available to discuss implementation details or clarify requirements.
-
-Thank you for your assistance.
-
-Best regards,
-[Your Name]
-[Your Title]
-[Contact Information]
+public class BasicDatParser {
+    
+    // This class represents a parsed record from the DAT file
+    static class BusinessRecord {
+        String identifier;
+        String businessName;
+        String locationInfo;
+        
+        public BusinessRecord(String identifier, String businessName, String locationInfo) {
+            this.identifier = identifier;
+            this.businessName = businessName;
+            this.locationInfo = locationInfo;
+        }
+        
+        @Override
+        public String toString() {
+            return "Record{" +
+                    "identifier='" + identifier + '\'' +
+                    ", businessName='" + businessName + '\'' +
+                    ", locationInfo='" + locationInfo + '\'' +
+                    '}';
+        }
+    }
+    
+    public static void main(String[] args) {
+        String filePath = "your_file.dat"; // Replace with your actual file path
+        List<BusinessRecord> records = new ArrayList<>();
+        
+        try (BufferedReader reader = new BufferedReader(new FileReader(filePath))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                BusinessRecord record = parseLine(line);
+                if (record != null) {
+                    records.add(record);
+                    System.out.println(record); // Print each record as it's parsed
+                }
+            }
+        } catch (IOException e) {
+            System.err.println("Error reading file: " + e.getMessage());
+        }
+        
+        // Generate and display statistics
+        displayStatistics(records);
+    }
+    
+    private static BusinessRecord parseLine(String line) {
+        if (line == null || line.trim().isEmpty()) {
+            return null;
+        }
+        
+        // Based on your sample, assuming records have this structure:
+        // - First ~30 characters: Identifier/reference number
+        // - Next section: Business name in ALL CAPS
+        // - Later section: Location information
+        
+        // Extract identifier (first part)
+        String identifier = "";
+        if (line.length() > 30) {
+            identifier = line.substring(0, 30).trim();
+        }
+        
+        // Extract business name (looking for capitalized words)
+        String businessName = "";
+        int nameStart = 0;
+        for (int i = 30; i < line.length(); i++) {
+            if (Character.isLetter(line.charAt(i)) && Character.isUpperCase(line.charAt(i))) {
+                nameStart = i;
+                break;
+            }
+        }
+        
+        if (nameStart > 0) {
+            int nameEnd = line.indexOf(' ', nameStart + 10); // Assuming business name is at least 10 chars
+            if (nameEnd > 0) {
+                businessName = line.substring(nameStart, nameEnd).trim();
+            } else {
+                businessName = line.substring(nameStart).trim();
+            }
+        }
+        
+        // Look for location information in the latter part of the line
+        String locationInfo = "";
+        int locationStart = line.indexOf("  ", nameStart + businessName.length());
+        if (locationStart > 0) {
+            locationInfo = line.substring(locationStart).trim();
+        }
+        
+        return new BusinessRecord(identifier, businessName, locationInfo);
+    }
+    
+    private static void displayStatistics(List<BusinessRecord> records) {
+        System.out.println("\n===== DAT File Statistics =====");
+        System.out.println("Total records: " + records.size());
+        
+        // Count by business name
+        Map<String, Integer> businessNameCounts = new HashMap<>();
+        for (BusinessRecord record : records) {
+            String name = record.businessName;
+            businessNameCounts.put(name, businessNameCounts.getOrDefault(name, 0) + 1);
+        }
+        
+        System.out.println("\nBusiness name distribution:");
+        businessNameCounts.entrySet().stream()
+            .sorted((e1, e2) -> e2.getValue().compareTo(e1.getValue()))
+            .limit(10)  // Show top 10
+            .forEach(e -> System.out.println(e.getKey() + ": " + e.getValue()));
+        
+        // Count by identifier pattern (first 2 characters)
+        Map<String, Integer> idPatternCounts = new HashMap<>();
+        for (BusinessRecord record : records) {
+            if (record.identifier.length() >= 2) {
+                String pattern = record.identifier.substring(0, 2);
+                idPatternCounts.put(pattern, idPatternCounts.getOrDefault(pattern, 0) + 1);
+            }
+        }
+        
+        System.out.println("\nIdentifier pattern distribution:");
+        idPatternCounts.entrySet().stream()
+            .sorted((e1, e2) -> e2.getValue().compareTo(e1.getValue()))
+            .forEach(e -> System.out.println(e.getKey() + ": " + e.getValue()));
+        
+        // Check for special patterns like consecutive zeros
+        int recordsWithConsecutiveZeros = 0;
+        for (BusinessRecord record : records) {
+            if (record.identifier.contains("0000")) {
+                recordsWithConsecutiveZeros++;
+            }
+        }
+        
+        System.out.println("\nRecords with consecutive zeros: " + recordsWithConsecutiveZeros);
+        System.out.println("Percentage: " + (100.0 * recordsWithConsecutiveZeros / records.size()) + "%");
+    }
+}
