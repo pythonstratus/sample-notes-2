@@ -1,0 +1,84 @@
+import java.io.*;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
+
+public class TdaAndTdiCombiner {
+    
+    public static void main(String[] args) {
+        String tdaFilePath = "path/to/your/file.TDA";
+        String tdiFilePath = "path/to/your/file.TDI";
+        String outputFilePath = "path/to/output/COMBO.RAW";
+        
+        try {
+            combineFiles(tdaFilePath, tdiFilePath, outputFilePath);
+            System.out.println("Successfully combined files into " + outputFilePath);
+        } catch (IOException e) {
+            System.err.println("Error combining files: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+    
+    public static void combineFiles(String tdaFilePath, String tdiFilePath, String outputFilePath) 
+            throws IOException {
+        
+        // Open file channels for reading
+        FileChannel tdaChannel = new FileInputStream(tdaFilePath).getChannel();
+        FileChannel tdiChannel = new FileInputStream(tdiFilePath).getChannel();
+        
+        // Create output channel for writing
+        FileChannel outputChannel = new FileOutputStream(outputFilePath).getChannel();
+        
+        // Get file sizes
+        long tdaSize = tdaChannel.size();
+        long tdiSize = tdiChannel.size();
+        
+        // Allocate buffers for each file
+        ByteBuffer tdaBuffer = ByteBuffer.allocate((int)tdaSize);
+        ByteBuffer tdiBuffer = ByteBuffer.allocate((int)tdiSize);
+        
+        // Read data from input files
+        tdaChannel.read(tdaBuffer);
+        tdiChannel.read(tdiBuffer);
+        
+        // Prepare buffers for reading
+        tdaBuffer.flip();
+        tdiBuffer.flip();
+        
+        // Write TDA content first
+        outputChannel.write(tdaBuffer);
+        
+        // Then write TDI content
+        outputChannel.write(tdiBuffer);
+        
+        // Close all channels
+        tdaChannel.close();
+        tdiChannel.close();
+        outputChannel.close();
+    }
+    
+    // For handling larger files, use this method instead of the one above
+    public static void combineFilesWithChunking(String tdaFilePath, String tdiFilePath, String outputFilePath) 
+            throws IOException {
+        
+        try (FileInputStream tdaInputStream = new FileInputStream(tdaFilePath);
+             FileInputStream tdiInputStream = new FileInputStream(tdiFilePath);
+             FileOutputStream outputStream = new FileOutputStream(outputFilePath)) {
+            
+            // Buffer for reading/writing in chunks
+            byte[] buffer = new byte[8192]; // 8KB buffer
+            int bytesRead;
+            
+            // Copy TDA file content
+            while ((bytesRead = tdaInputStream.read(buffer)) != -1) {
+                outputStream.write(buffer, 0, bytesRead);
+            }
+            
+            // Copy TDI file content
+            while ((bytesRead = tdiInputStream.read(buffer)) != -1) {
+                outputStream.write(buffer, 0, bytesRead);
+            }
+            
+            outputStream.flush();
+        }
+    }
+}
