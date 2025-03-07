@@ -1,0 +1,150 @@
+import java.io.*;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
+import java.nio.file.*;
+import java.util.concurrent.*;
+import java.util.zip.CRC32;
+
+public class AdvancedTdaTdiCombiner {
+
+    public static void main(String[] args) {
+        String tdaFilePath = "path/to/your/file.TDA";
+        String tdiFilePath = "path/to/your/file.TDI";
+        String outputFilePath = "path/to/output/COMBO.RAW";
+        
+        try {
+            // Choose the most appropriate method based on file sizes
+            long tdaSize = Files.size(Paths.get(tdaFilePath));
+            long tdiSize = Files.size(Paths.get(tdiFilePath));
+            
+            if (tdaSize + tdiSize > 1_000_000_000) { // If combined size > 1GB
+                parallelCombineFiles(tdaFilePath, tdiFilePath, outputFilePath);
+            } else {
+                memoryMappedCombine(tdaFilePath, tdiFilePath, outputFilePath);
+            }
+            
+            System.out.println("Successfully combined files into " + outputFilePath);
+            System.out.println("File checksum: " + calculateChecksum(outputFilePath));
+        } catch (Exception e) {
+            System.err.println("Error combining files: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+    
+    /**
+     * Uses memory-mapped files for efficient I/O operations
+     */
+    public static void memoryMappedCombine(String tdaFilePath, String tdiFilePath, String outputFilePath) 
+            throws IOException {
+        
+        try (FileChannel tdaChannel = FileChannel.open(Paths.get(tdaFilePath), StandardOpenOption.READ);
+             FileChannel tdiChannel = FileChannel.open(Paths.get(tdiFilePath), StandardOpenOption.READ);
+             FileChannel outputChannel = FileChannel.open(Paths.get(outputFilePath),
+                     StandardOpenOption.CREATE, StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING)) {
+            
+            // Map the files into memory
+            ByteBuffer tdaBuffer = tdaChannel.map(FileChannel.MapMode.READ_ONLY, 0, tdaChannel.size());
+            ByteBuffer tdiBuffer = tdiChannel.map(FileChannel.MapMode.READ_ONLY, 0, tdiChannel.size());
+            
+            // Write to output
+            outputChannel.write(tdaBuffer);
+            outputChannel.write(tdiBuffer);
+        }
+    }
+    
+    /**
+     * Uses parallel processing to handle very large files
+     */
+    public static void parallelCombineFiles(String tdaFilePath, String tdiFilePath, String outputFilePath) 
+            throws IOException, InterruptedException, ExecutionException {
+        
+        // Create output file
+        Path outputPath = Paths.get(outputFilePath);
+        if (Files.exists(outputPath)) {
+            Files.delete(outputPath);
+        }
+        Files.createFile(outputPath);
+        
+        // Configure thread pool
+        int processors = Runtime.getRuntime().availableProcessors();
+        ExecutorService executor = Executors.newFixedThreadPool(processors);
+        
+        // Get file sizes
+        long tdaSize = Files.size(Paths.get(tdaFilePath));
+        
+        // Create tasks for parallel processing
+        Future<Boolean> tdaTask = executor.submit(() -> 
+            copyFileSegment(tdaFilePath, outputFilePath, 0, 0, tdaSize));
+            
+        Future<Boolean> tdiTask = executor.submit(() -> 
+            copyFileSegment(tdiFilePath, outputFilePath, 0, tdaSize, Files.size(Paths.get(tdiFilePath))));
+        
+        // Wait for completion
+        tdaTask.get();
+        tdiTask.get();
+        
+        // Shutdown executor
+        executor.shutdown();
+        executor.awaitTermination(1, TimeUnit.MINUTES);
+    }
+    
+    /**
+     * Copies a segment of a file to a specific position in the output file
+     */
+    private static boolean copyFileSegment(String sourcePath, String targetPath, 
+                                         long sourcePos, long targetPos, long length) throws IOException {
+        try (FileChannel sourceChannel = FileChannel.open(Paths.get(sourcePath), StandardOpenOption.READ);
+             FileChannel targetChannel = FileChannel.open(Paths.get(targetPath), 
+                     StandardOpenOption.WRITE, StandardOpenOption.CREATE)) {
+            
+            // Choose an appropriate chunk size
+            int chunkSize = 8 * 1024 * 1024; // 8MB chunks
+            long remaining = length;
+            long currentSourcePos = sourcePos;
+            long currentTargetPos = targetPos;
+            
+            while (remaining > 0) {
+                long chunkLength = Math.min(remaining, chunkSize);
+                long transferred = sourceChannel.transferTo(
+                        currentSourcePos, chunkLength, targetChannel.position(currentTargetPos));
+                
+                if (transferred <= 0) {
+                    break; // Avoid infinite loop
+                }
+                
+                remaining -= transferred;
+                currentSourcePos += transferred;
+                currentTargetPos += transferred;
+            }
+            
+            return remaining == 0;
+        }
+    }
+    
+    /**
+     * Advanced file transfer with asynchronous I/O
+     * Note: Requires Java 11+ for AsynchronousFileChannel
+     */
+    public static void asyncCombineFiles(String tdaFilePath, String tdiFilePath, String outputFilePath) 
+            throws IOException, InterruptedException, ExecutionException {
+        
+        // This implementation would use AsynchronousFileChannel
+        // Left as a placeholder as it requires Java 11+
+        // Implementation would be similar to parallelCombineFiles but with non-blocking I/O
+    }
+    
+    /**
+     * Calculate checksum of the generated file
+     */
+    public static long calculateChecksum(String filePath) throws IOException {
+        CRC32 checksum = new CRC32();
+        try (InputStream is = Files.newInputStream(Paths.get(filePath))) {
+            byte[] buffer = new byte[8192];
+            int bytesRead;
+            while ((bytesRead = is.read(buffer)) != -1) {
+                checksum.update(buffer, 0, bytesRead);
+            }
+        }
+        return checksum.getValue();
+    }
+}
