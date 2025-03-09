@@ -1,0 +1,63 @@
+package com.example.e1processor;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.batch.core.Job;
+import org.springframework.batch.core.JobParameters;
+import org.springframework.batch.core.JobParametersBuilder;
+import org.springframework.batch.core.launch.JobLauncher;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.boot.CommandLineRunner;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Profile;
+
+/**
+ * Runner class that can execute the E1 processing job from command line
+ * This mimics the shell script execution behavior
+ */
+@SpringBootApplication
+public class E1ProcessorRunner {
+    private static final Logger log = LoggerFactory.getLogger(E1ProcessorRunner.class);
+    
+    @Autowired
+    private JobLauncher jobLauncher;
+    
+    @Autowired
+    @Qualifier("processE1Job")
+    private Job processE1Job;
+    
+    public static void main(String[] args) {
+        SpringApplication.run(E1ProcessorRunner.class, args);
+    }
+    
+    /**
+     * Command line runner that executes the E1 processing job
+     * Activated only when the "cli" profile is active
+     */
+    @Bean
+    @Profile("cli")
+    public CommandLineRunner runE1Processor() {
+        return args -> {
+            log.info("Starting E1 processing from command line");
+            
+            try {
+                JobParameters jobParameters = new JobParametersBuilder()
+                        .addLong("time", System.currentTimeMillis())
+                        .toJobParameters();
+                
+                jobLauncher.run(processE1Job, jobParameters);
+                
+                log.info("E1 processing completed successfully");
+            } catch (Exception e) {
+                log.error("Error running E1 processing job", e);
+                System.exit(1);
+            }
+            
+            // Exit after completion
+            System.exit(0);
+        };
+    }
+}
