@@ -1,0 +1,269 @@
+package com.example.e1processor;
+
+import org.springframework.batch.item.ItemProcessor;
+import org.springframework.batch.item.file.mapping.FieldSetMapper;
+import org.springframework.batch.item.file.transform.FieldSet;
+import org.springframework.validation.BindException;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+
+public class E1RecordProcessor implements ItemProcessor<E1Record, E1Record> {
+
+    @Override
+    public E1Record process(E1Record item) throws Exception {
+        // Implement any transformation or business logic here
+        // For example, you might decode fields as specified in the control file
+        
+        // Handle DECODE and REPLACE functions from the control file
+        if (item.getLienCd() != null) {
+            // Perform the DECODE(:LIENCD, '0', '0', '1','1','1')
+            String lienCd = item.getLienCd();
+            String decodedLienCd = "1"; // Default value
+            if ("0".equals(lienCd)) {
+                decodedLienCd = "0";
+            } else if ("1".equals(lienCd)) {
+                decodedLienCd = "1";
+            }
+            item.setLienCd(decodedLienCd);
+        }
+        
+        if (item.getLargedollarind() != null) {
+            // DECODE(:LARGEDOLLARIND, '1','T','2','T','F')
+            String largedollarind = item.getLargedollarind();
+            String decodedValue = "F"; // Default value
+            if ("1".equals(largedollarind) || "2".equals(largedollarind)) {
+                decodedValue = "T";
+            }
+            item.setLargedollarind(decodedValue);
+        }
+        
+        // Apply similar transformations for other fields based on control file
+        // DECODE(:TXPYRREPEATERIND, '1','P','2','T')
+        if (item.getTxpyrrepeaterind() != null) {
+            String txpyrrepeaterind = item.getTxpyrrepeaterind();
+            if ("1".equals(txpyrrepeaterind)) {
+                item.setTxpyrrepeaterind("P");
+            } else if ("2".equals(txpyrrepeaterind)) {
+                item.setTxpyrrepeaterind("T");
+            }
+        }
+        
+        // DECODE(:PYRAMIDIND, '1','1','2','3','4','4','9','9','0')
+        if (item.getPyramidind() != null) {
+            String pyramidind = item.getPyramidind();
+            switch (pyramidind) {
+                case "1": item.setPyramidind("1"); break;
+                case "2": item.setPyramidind("3"); break;
+                case "4": item.setPyramidind("4"); break;
+                case "9": item.setPyramidind("9"); break;
+                default: item.setPyramidind("0");
+            }
+        }
+        
+        // Add more field transformations based on the control file
+        // ...
+        
+        return item;
+    }
+}
+
+class E1RecordFieldSetMapper implements FieldSetMapper<E1Record> {
+
+    private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd");
+
+    @Override
+    public E1Record mapFieldSet(FieldSet fieldSet) throws BindException {
+        E1Record record = new E1Record();
+        
+        // Map all fields from the control file
+        record.setOutputcd(fieldSet.readString("outputcd"));
+        
+        // Handle date fields with format transformation
+        String extractDtStr = fieldSet.readString("extractDt");
+        if (extractDtStr != null && !extractDtStr.isEmpty()) {
+            try {
+                // For the date fields, apply the REPLACE(:EXTRACTDT, '00000000', '19000101')
+                if ("00000000".equals(extractDtStr)) {
+                    extractDtStr = "19000101";
+                }
+                record.setExtractDt(LocalDate.parse(extractDtStr, DATE_FORMATTER));
+            } catch (Exception e) {
+                // Handle parse exception
+            }
+        }
+        
+        // Handle RPTENDINODT with the same pattern
+        String rptendinodtStr = fieldSet.readString("rptendinodt");
+        if (rptendinodtStr != null && !rptendinodtStr.isEmpty()) {
+            try {
+                if ("00000000".equals(rptendinodtStr)) {
+                    rptendinodtStr = "19000101";
+                }
+                record.setRptendinodt(LocalDate.parse(rptendinodtStr, DATE_FORMATTER));
+            } catch (Exception e) {
+                // Handle parse exception
+            }
+        }
+        
+        // Map all other fields with appropriate type conversions
+        record.setTin(fieldSet.readString("tin"));
+        record.setFilesourceCd(fieldSet.readString("filesourceCd"));
+        record.setTintype(fieldSet.readString("tintype"));
+        record.setAscrtnDn(fieldSet.readString("ascrtnDn"));
+        record.setScrnyasgntind(fieldSet.readString("scrnyasgntind"));
+        record.setTxpyrln1nm(fieldSet.readString("txpyrln1nm"));
+        record.setTxpyrln2nm(fieldSet.readString("txpyrln2nm"));
+        record.setNamectrlCd(fieldSet.readString("namectrlCd"));
+        record.setLnaddress(fieldSet.readString("lnaddress"));
+        record.setCityNm(fieldSet.readString("cityNm"));
+        record.setStateCd(fieldSet.readString("stateCd"));
+        record.setTxpyrzipCd(fieldSet.readString("txpyrzipCd"));
+        record.setEntcaseCd(fieldSet.readString("entcaseCd"));
+        record.setEntsrvcaseCd(fieldSet.readString("entsrvcaseCd"));
+        record.setGradelylCd(fieldSet.readString("gradelylCd"));
+        record.setRmsscorelnNm(fieldSet.readString("rmsscorelnNm"));
+        
+        // Handle numeric fields with DECODE transformations
+        String totcaseamtStr = fieldSet.readString("totcaseamt");
+        if (totcaseamtStr != null && !totcaseamtStr.isEmpty()) {
+            try {
+                // DECODE(:TOTCASEAMT, :TOTCASEAMT, (:TOTCASEAMT / 100))
+                BigDecimal totcaseamt = new BigDecimal(totcaseamtStr);
+                record.setTotcaseamt(totcaseamt.divide(new BigDecimal(100)));
+            } catch (Exception e) {
+                // Handle parse exception
+            }
+        }
+        
+        // Process all date fields with the same pattern
+        mapDateField(fieldSet, "initasgDt", record::setInitasgDt);
+        mapDateField(fieldSet, "roasigtmDt", record::setRoasigtmDt);
+        mapDateField(fieldSet, "latesttouchDt", record::setLatesttouchDt);
+        mapDateField(fieldSet, "cpsdt", record::setCpsdt);
+        mapDateField(fieldSet, "iarejectDt", record::setIarejectDt);
+        mapDateField(fieldSet, "initcontactuedt", record::setInitcontactuedt);
+        mapDateField(fieldSet, "initcontactDt", record::setInitcontactDt);
+        mapDateField(fieldSet, "milstDt", record::setMilstDt);
+        mapDateField(fieldSet, "tslatesttouchDt", record::setTslatesttouchDt);
+        mapDateField(fieldSet, "cgplatestDt", record::setCgplatestDt);
+        mapDateField(fieldSet, "overageDt", record::setOverageDt);
+        mapDateField(fieldSet, "potentlamt", record::setPotentlamt);
+        mapDateField(fieldSet, "txpyrcasefieldDte", record::setTxpyrcasefieldDte);
+        mapDateField(fieldSet, "dt_doo", record::setDt_doo);
+        
+        // Handle numeric fields with DECODE transformations
+        mapDecodedNumericField(fieldSet, "inputhrs", record::setInputhrs, 100);
+        mapDecodedNumericField(fieldSet, "totalcasehrs", record::setTotalcasehrs, 100);
+        mapDecodedNumericField(fieldSet, "mihrs", record::setMihrs, 100);
+        mapDecodedNumericField(fieldSet, "txpyrcasefieldhours", record::setTxpyrcasefieldhours, 100);
+        
+        // Integer fields
+        try { record.setCycteuchcnt(fieldSet.readInt("cycteuchcnt")); } catch (Exception e) {}
+        try { record.setTouchcnt(fieldSet.readInt("touchcnt")); } catch (Exception e) {}
+        
+        // String fields (continuing from earlier)
+        record.setCaseidCd(fieldSet.readString("caseidCd"));
+        record.setOverageDtind(fieldSet.readString("overageDtind"));
+        record.setLienCd(fieldSet.readString("lienCd"));
+        record.setLargedollarind(fieldSet.readString("largedollarind"));
+        record.setPdtind(fieldSet.readString("pdtind"));
+        record.setTxpyrrepeaterind(fieldSet.readString("txpyrrepeaterind"));
+        record.setSelectiomCd(fieldSet.readString("selectiomCd"));
+        record.setPyramidind(fieldSet.readString("pyramidind"));
+        record.setPiaCd(fieldSet.readString("piaCd"));
+        record.setFrm1120sCd(fieldSet.readString("frm1120sCd"));
+        record.setFrm1065Cd(fieldSet.readString("frm1065Cd"));
+        record.setDisastervictimCd(fieldSet.readString("disastervictimCd"));
+        record.setInnocentspouseind(fieldSet.readString("innocentspouseind"));
+        record.setErrfind(fieldSet.readString("errfind"));
+        record.setPmslevy(fieldSet.readString("pmslevy"));
+        record.setLrgcmplxcorpCd(fieldSet.readString("lrgcmplxcorpCd"));
+        record.setCepCd(fieldSet.readString("cepCd"));
+        record.setBooCd(fieldSet.readString("booCd"));
+        record.setBooclCd(fieldSet.readString("booclCd"));
+        record.setScrnysubrsCd(fieldSet.readString("scrnysubrsCd"));
+        record.setNalciCd(fieldSet.readString("nalciCd"));
+        record.setNalcevalCd(fieldSet.readString("nalcevalCd"));
+        record.setNalcsyr(fieldSet.readString("nalcsyr"));
+        record.setNetpaCh(fieldSet.readString("netpaCh"));
+        record.setLw31ind(fieldSet.readString("lw31ind"));
+        record.setTstouchCnt(fieldSet.readString("tstouchCnt"));
+        record.setTstotcasehrs(fieldSet.readString("tstotcasehrs"));
+        record.setCgpdateuid(fieldSet.readString("cgpdateuid"));
+        record.setCpstotcasehrs(fieldSet.readString("cpstotcasehrs"));
+        record.setTxpyrlnaddr(fieldSet.readString("txpyrlnaddr"));
+        record.setFscntractorind(fieldSet.readString("fscntractorind"));
+        record.setIdenttheftind(fieldSet.readString("identtheftind"));
+        record.setEntfrnchtxCyd(fieldSet.readString("entfrnchtxCyd"));
+        
+        // Numeric fields
+        try {
+            record.setOverpymtintamt(new BigDecimal(fieldSet.readString("overpymtintamt")));
+        } catch (Exception e) {}
+        
+        record.setLicind(fieldSet.readString("licind"));
+        record.setCcidpselectCd(fieldSet.readString("ccidpselectCd"));
+        record.setForeignpstlaCd(fieldSet.readString("foreignpstlaCd"));
+        record.setPoppaytiescntty(fieldSet.readString("poppaytiescntty"));
+        record.setRccorsulthoUcnt(fieldSet.readString("rccorsulthoUcnt"));
+        record.setCorratind(fieldSet.readString("corratind"));
+        record.setEntfrnlsfflgind(fieldSet.readString("entfrnlsfflgind"));
+        record.setTxpyrapprvdpgrmln1(fieldSet.readString("txpyrapprvdpgrmln1"));
+        record.setTxpyrapprvdpgrmln2(fieldSet.readString("txpyrapprvdpgrmln2"));
+        record.setFedepptind(fieldSet.readString("fedepptind"));
+        record.setIrsepptind(fieldSet.readString("irsepptind"));
+        record.setFatcaind(fieldSet.readString("fatcaind"));
+        
+        // Additional numeric fields with transformation
+        try {
+            String agiAmtStr = fieldSet.readString("agi_amt");
+            if (agiAmtStr != null && !agiAmtStr.isEmpty()) {
+                BigDecimal agiAmt = new BigDecimal(agiAmtStr);
+                record.setAgi_amt(agiAmt.divide(new BigDecimal(100)));
+            }
+        } catch (Exception e) {}
+        
+        try {
+            String tpiAmtStr = fieldSet.readString("tpi_amt");
+            if (tpiAmtStr != null && !tpiAmtStr.isEmpty()) {
+                BigDecimal tpiAmt = new BigDecimal(tpiAmtStr);
+                record.setTpi_amt(tpiAmt.divide(new BigDecimal(100)));
+            }
+        } catch (Exception e) {}
+        
+        record.setAgi_tpi_tx_yr(fieldSet.readString("agi_tpi_tx_yr"));
+        record.setEntfrwsursCd(fieldSet.readString("entfrwsursCd"));
+        
+        return record;
+    }
+    
+    private void mapDateField(FieldSet fieldSet, String fieldName, java.util.function.Consumer<LocalDate> setter) {
+        String dateStr = fieldSet.readString(fieldName);
+        if (dateStr != null && !dateStr.isEmpty()) {
+            try {
+                // Apply the default transformation for date fields
+                if ("00000000".equals(dateStr)) {
+                    dateStr = "19000101";
+                }
+                setter.accept(LocalDate.parse(dateStr, DATE_FORMATTER));
+            } catch (Exception e) {
+                // Handle parse exception
+            }
+        }
+    }
+    
+    private void mapDecodedNumericField(FieldSet fieldSet, String fieldName, 
+                                        java.util.function.Consumer<BigDecimal> setter, int divisor) {
+        String valueStr = fieldSet.readString(fieldName);
+        if (valueStr != null && !valueStr.isEmpty()) {
+            try {
+                BigDecimal value = new BigDecimal(valueStr);
+                setter.accept(value.divide(new BigDecimal(divisor)));
+            } catch (Exception e) {
+                // Handle parse exception
+            }
+        }
+    }
+}
