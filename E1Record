@@ -33,7 +33,7 @@ public class E1Record {
     private BigDecimal totalcasehrs;
     private String caseidCd;
     private String overageDtind;
-    private String liehCd;
+    private String lienCd;
     private String largedollarind;
     private String pdtind;
     private String txpyrrepeaterind;
