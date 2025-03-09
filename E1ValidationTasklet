@@ -1,0 +1,52 @@
+package com.example.e1processor;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.batch.core.StepContribution;
+import org.springframework.batch.core.scope.context.ChunkContext;
+import org.springframework.batch.core.step.tasklet.Tasklet;
+import org.springframework.batch.repeat.RepeatStatus;
+import org.springframework.beans.factory.annotation.Value;
+
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+
+/**
+ * Tasklet for checking SQL*Loader errors by examining the bad file
+ * Equivalent to the error checking in the shell script
+ */
+public class E1ValidationTasklet implements Tasklet {
+    private static final Logger log = LoggerFactory.getLogger(E1ValidationTasklet.class);
+    
+    @Value("${app.logdir:./logs}")
+    private String logDir;
+    
+    @Override
+    public RepeatStatus execute(StepContribution contribution, ChunkContext chunkContext) throws Exception {
+        log.info("Checking for SQL*Loader bad file for errors");
+        
+        String badFilePath = logDir + "/E1.bad";
+        File badFile = new File(badFilePath);
+        
+        if (badFile.exists() && badFile.length() > 0) {
+            try {
+                // Count lines in bad file to get error count
+                long badCount = Files.lines(Paths.get(badFilePath)).count();
+                
+                if (badCount > 0) {
+                    log.error("ERROR: E1Processor SQL*Loader - {} records in E1.bad", badCount);
+                    throw new RuntimeException("SQL*Loader encountered errors during load");
+                }
+            } catch (IOException e) {
+                log.error("Error reading bad file", e);
+                throw new RuntimeException("Failed to check for load errors", e);
+            }
+        } else {
+            log.info("No errors found in SQL*Loader bad file");
+        }
+        
+        return RepeatStatus.FINISHED;
+    }
+}
