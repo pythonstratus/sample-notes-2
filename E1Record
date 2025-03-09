@@ -1,0 +1,818 @@
+package com.example.e1processor;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
+
+public class E1Record {
+    private String outputcd;
+    private LocalDate extractDt;
+    private LocalDate rptendinodt;
+    private String tin;
+    private String filesourceCd;
+    private String tintype;
+    private String ascrtnDn;
+    private String scrnyasgntind;
+    private String txpyrln1nm;
+    private String txpyrln2nm;
+    private String namectrlCd;
+    private String lnaddress;
+    private String cityNm;
+    private String stateCd;
+    private String txpyrzipCd;
+    private String entcaseCd;
+    private String entsrvcaseCd;
+    private String gradelylCd;
+    private String rmsscorelnNm;
+    private BigDecimal totcaseamt;
+    private LocalDate initasgDt;
+    private LocalDate roasigtmDt;
+    private Integer cycteuchcnt;
+    private Integer touchcnt;
+    private LocalDate latesttouchDt;
+    private BigDecimal inputhrs;
+    private BigDecimal totalcasehrs;
+    private String caseidCd;
+    private String overageDtind;
+    private String liehCd;
+    private String largedollarind;
+    private String pdtind;
+    private String txpyrrepeaterind;
+    private String selectiomCd;
+    private String pyramidind;
+    private String piaCd;
+    private String frm1120sCd;
+    private String frm1065Cd;
+    private LocalDate cpsdt;
+    private String disastervictimCd;
+    private String innocentspouseind;
+    private String errfind;
+    private String pmslevy;
+    private LocalDate iarejectDt;
+    private String lrgcmplxcorpCd;
+    private String cepCd;
+    private String booCd;
+    private String booclCd;
+    private String scrnysubrsCd;
+    private String nalciCd;
+    private String nalcevalCd;
+    private String nalcsyr;
+    private LocalDate initcontactuedt;
+    private LocalDate initcontactDt;
+    private BigDecimal mihrs;
+    private String netpaCh;
+    private LocalDate milstDt;
+    private String lw31ind;
+    private String tstouchCnt;
+    private LocalDate tslatesttouchDt;
+    private String tstotcasehrs;
+    private String cgpdateuid;
+    private LocalDate cgplatestDt;
+    private String cpstotcasehrs;
+    private String txpyrlnaddr;
+    private String fscntractorind;
+    private String identtheftind;
+    private String entfrnchtxCyd;
+    private BigDecimal overpymtintamt;
+    private String licind;
+    private String ccidpselectCd;
+    private String foreignpstlaCd;
+    private String poppaytiescntty;
+    private LocalDate overageDt;
+    private LocalDate potentlamt;
+    private String rccorsulthoUcnt;
+    private String corratind;
+    private String entfrnlsfflgind;
+    private String txpyrapprvdpgrmln1;
+    private String txpyrapprvdpgrmln2;
+    private LocalDate txpyrcasefieldDte;
+    private BigDecimal txpyrcasefieldhours;
+    private String fedepptind;
+    private String irsepptind;
+    private String fatcaind;
+    private LocalDate dt_doo;
+    private BigDecimal agi_amt;
+    private BigDecimal tpi_amt;
+    private String agi_tpi_tx_yr;
+    private String entfrwsursCd;
+
+    // Getters and Setters
+    public String getOutputcd() {
+        return outputcd;
+    }
+
+    public void setOutputcd(String outputcd) {
+        this.outputcd = outputcd;
+    }
+
+    public LocalDate getExtractDt() {
+        return extractDt;
+    }
+
+    public void setExtractDt(LocalDate extractDt) {
+        this.extractDt = extractDt;
+    }
+
+    public LocalDate getRptendinodt() {
+        return rptendinodt;
+    }
+
+    public void setRptendinodt(LocalDate rptendinodt) {
+        this.rptendinodt = rptendinodt;
+    }
+
+    public String getTin() {
+        return tin;
+    }
+
+    public void setTin(String tin) {
+        this.tin = tin;
+    }
+
+    public String getFilesourceCd() {
+        return filesourceCd;
+    }
+
+    public void setFilesourceCd(String filesourceCd) {
+        this.filesourceCd = filesourceCd;
+    }
+
+    public String getTintype() {
+        return tintype;
+    }
+
+    public void setTintype(String tintype) {
+        this.tintype = tintype;
+    }
+
+    public String getAscrtnDn() {
+        return ascrtnDn;
+    }
+
+    public void setAscrtnDn(String ascrtnDn) {
+        this.ascrtnDn = ascrtnDn;
+    }
+
+    public String getScrnyasgntind() {
+        return scrnyasgntind;
+    }
+
+    public void setScrnyasgntind(String scrnyasgntind) {
+        this.scrnyasgntind = scrnyasgntind;
+    }
+
+    public String getTxpyrln1nm() {
+        return txpyrln1nm;
+    }
+
+    public void setTxpyrln1nm(String txpyrln1nm) {
+        this.txpyrln1nm = txpyrln1nm;
+    }
+
+    public String getTxpyrln2nm() {
+        return txpyrln2nm;
+    }
+
+    public void setTxpyrln2nm(String txpyrln2nm) {
+        this.txpyrln2nm = txpyrln2nm;
+    }
+
+    public String getNamectrlCd() {
+        return namectrlCd;
+    }
+
+    public void setNamectrlCd(String namectrlCd) {
+        this.namectrlCd = namectrlCd;
+    }
+
+    public String getLnaddress() {
+        return lnaddress;
+    }
+
+    public void setLnaddress(String lnaddress) {
+        this.lnaddress = lnaddress;
+    }
+
+    public String getCityNm() {
+        return cityNm;
+    }
+
+    public void setCityNm(String cityNm) {
+        this.cityNm = cityNm;
+    }
+
+    public String getStateCd() {
+        return stateCd;
+    }
+
+    public void setStateCd(String stateCd) {
+        this.stateCd = stateCd;
+    }
+
+    public String getTxpyrzipCd() {
+        return txpyrzipCd;
+    }
+
+    public void setTxpyrzipCd(String txpyrzipCd) {
+        this.txpyrzipCd = txpyrzipCd;
+    }
+
+    public String getEntcaseCd() {
+        return entcaseCd;
+    }
+
+    public void setEntcaseCd(String entcaseCd) {
+        this.entcaseCd = entcaseCd;
+    }
+
+    public String getEntsrvcaseCd() {
+        return entsrvcaseCd;
+    }
+
+    public void setEntsrvcaseCd(String entsrvcaseCd) {
+        this.entsrvcaseCd = entsrvcaseCd;
+    }
+
+    public String getGradelylCd() {
+        return gradelylCd;
+    }
+
+    public void setGradelylCd(String gradelylCd) {
+        this.gradelylCd = gradelylCd;
+    }
+
+    public String getRmsscorelnNm() {
+        return rmsscorelnNm;
+    }
+
+    public void setRmsscorelnNm(String rmsscorelnNm) {
+        this.rmsscorelnNm = rmsscorelnNm;
+    }
+
+    public BigDecimal getTotcaseamt() {
+        return totcaseamt;
+    }
+
+    public void setTotcaseamt(BigDecimal totcaseamt) {
+        this.totcaseamt = totcaseamt;
+    }
+
+    public LocalDate getInitasgDt() {
+        return initasgDt;
+    }
+
+    public void setInitasgDt(LocalDate initasgDt) {
+        this.initasgDt = initasgDt;
+    }
+
+    public LocalDate getRoasigtmDt() {
+        return roasigtmDt;
+    }
+
+    public void setRoasigtmDt(LocalDate roasigtmDt) {
+        this.roasigtmDt = roasigtmDt;
+    }
+
+    public Integer getCycteuchcnt() {
+        return cycteuchcnt;
+    }
+
+    public void setCycteuchcnt(Integer cycteuchcnt) {
+        this.cycteuchcnt = cycteuchcnt;
+    }
+
+    public Integer getTouchcnt() {
+        return touchcnt;
+    }
+
+    public void setTouchcnt(Integer touchcnt) {
+        this.touchcnt = touchcnt;
+    }
+
+    public LocalDate getLatesttouchDt() {
+        return latesttouchDt;
+    }
+
+    public void setLatesttouchDt(LocalDate latesttouchDt) {
+        this.latesttouchDt = latesttouchDt;
+    }
+
+    public BigDecimal getInputhrs() {
+        return inputhrs;
+    }
+
+    public void setInputhrs(BigDecimal inputhrs) {
+        this.inputhrs = inputhrs;
+    }
+
+    public BigDecimal getTotalcasehrs() {
+        return totalcasehrs;
+    }
+
+    public void setTotalcasehrs(BigDecimal totalcasehrs) {
+        this.totalcasehrs = totalcasehrs;
+    }
+
+    public String getCaseidCd() {
+        return caseidCd;
+    }
+
+    public void setCaseidCd(String caseidCd) {
+        this.caseidCd = caseidCd;
+    }
+
+    public String getOverageDtind() {
+        return overageDtind;
+    }
+
+    public void setOverageDtind(String overageDtind) {
+        this.overageDtind = overageDtind;
+    }
+
+    public String getLiehCd() {
+        return liehCd;
+    }
+
+    public void setLiehCd(String liehCd) {
+        this.liehCd = liehCd;
+    }
+
+    public String getLargedollarind() {
+        return largedollarind;
+    }
+
+    public void setLargedollarind(String largedollarind) {
+        this.largedollarind = largedollarind;
+    }
+
+    public String getPdtind() {
+        return pdtind;
+    }
+
+    public void setPdtind(String pdtind) {
+        this.pdtind = pdtind;
+    }
+
+    public String getTxpyrrepeaterind() {
+        return txpyrrepeaterind;
+    }
+
+    public void setTxpyrrepeaterind(String txpyrrepeaterind) {
+        this.txpyrrepeaterind = txpyrrepeaterind;
+    }
+
+    public String getSelectiomCd() {
+        return selectiomCd;
+    }
+
+    public void setSelectiomCd(String selectiomCd) {
+        this.selectiomCd = selectiomCd;
+    }
+
+    public String getPyramidind() {
+        return pyramidind;
+    }
+
+    public void setPyramidind(String pyramidind) {
+        this.pyramidind = pyramidind;
+    }
+
+    public String getPiaCd() {
+        return piaCd;
+    }
+
+    public void setPiaCd(String piaCd) {
+        this.piaCd = piaCd;
+    }
+
+    public String getFrm1120sCd() {
+        return frm1120sCd;
+    }
+
+    public void setFrm1120sCd(String frm1120sCd) {
+        this.frm1120sCd = frm1120sCd;
+    }
+
+    public String getFrm1065Cd() {
+        return frm1065Cd;
+    }
+
+    public void setFrm1065Cd(String frm1065Cd) {
+        this.frm1065Cd = frm1065Cd;
+    }
+
+    public LocalDate getCpsdt() {
+        return cpsdt;
+    }
+
+    public void setCpsdt(LocalDate cpsdt) {
+        this.cpsdt = cpsdt;
+    }
+
+    public String getDisastervictimCd() {
+        return disastervictimCd;
+    }
+
+    public void setDisastervictimCd(String disastervictimCd) {
+        this.disastervictimCd = disastervictimCd;
+    }
+
+    public String getInnocentspouseind() {
+        return innocentspouseind;
+    }
+
+    public void setInnocentspouseind(String innocentspouseind) {
+        this.innocentspouseind = innocentspouseind;
+    }
+
+    public String getErrfind() {
+        return errfind;
+    }
+
+    public void setErrfind(String errfind) {
+        this.errfind = errfind;
+    }
+
+    public String getPmslevy() {
+        return pmslevy;
+    }
+
+    public void setPmslevy(String pmslevy) {
+        this.pmslevy = pmslevy;
+    }
+
+    public LocalDate getIarejectDt() {
+        return iarejectDt;
+    }
+
+    public void setIarejectDt(LocalDate iarejectDt) {
+        this.iarejectDt = iarejectDt;
+    }
+
+    public String getLrgcmplxcorpCd() {
+        return lrgcmplxcorpCd;
+    }
+
+    public void setLrgcmplxcorpCd(String lrgcmplxcorpCd) {
+        this.lrgcmplxcorpCd = lrgcmplxcorpCd;
+    }
+
+    public String getCepCd() {
+        return cepCd;
+    }
+
+    public void setCepCd(String cepCd) {
+        this.cepCd = cepCd;
+    }
+
+    public String getBooCd() {
+        return booCd;
+    }
+
+    public void setBooCd(String booCd) {
+        this.booCd = booCd;
+    }
+
+    public String getBooclCd() {
+        return booclCd;
+    }
+
+    public void setBooclCd(String booclCd) {
+        this.booclCd = booclCd;
+    }
+
+    public String getScrnysubrsCd() {
+        return scrnysubrsCd;
+    }
+
+    public void setScrnysubrsCd(String scrnysubrsCd) {
+        this.scrnysubrsCd = scrnysubrsCd;
+    }
+
+    public String getNalciCd() {
+        return nalciCd;
+    }
+
+    public void setNalciCd(String nalciCd) {
+        this.nalciCd = nalciCd;
+    }
+
+    public String getNalcevalCd() {
+        return nalcevalCd;
+    }
+
+    public void setNalcevalCd(String nalcevalCd) {
+        this.nalcevalCd = nalcevalCd;
+    }
+
+    public String getNalcsyr() {
+        return nalcsyr;
+    }
+
+    public void setNalcsyr(String nalcsyr) {
+        this.nalcsyr = nalcsyr;
+    }
+
+    public LocalDate getInitcontactuedt() {
+        return initcontactuedt;
+    }
+
+    public void setInitcontactuedt(LocalDate initcontactuedt) {
+        this.initcontactuedt = initcontactuedt;
+    }
+
+    public LocalDate getInitcontactDt() {
+        return initcontactDt;
+    }
+
+    public void setInitcontactDt(LocalDate initcontactDt) {
+        this.initcontactDt = initcontactDt;
+    }
+
+    public BigDecimal getMihrs() {
+        return mihrs;
+    }
+
+    public void setMihrs(BigDecimal mihrs) {
+        this.mihrs = mihrs;
+    }
+
+    public String getNetpaCh() {
+        return netpaCh;
+    }
+
+    public void setNetpaCh(String netpaCh) {
+        this.netpaCh = netpaCh;
+    }
+
+    public LocalDate getMilstDt() {
+        return milstDt;
+    }
+
+    public void setMilstDt(LocalDate milstDt) {
+        this.milstDt = milstDt;
+    }
+
+    public String getLw31ind() {
+        return lw31ind;
+    }
+
+    public void setLw31ind(String lw31ind) {
+        this.lw31ind = lw31ind;
+    }
+
+    public String getTstouchCnt() {
+        return tstouchCnt;
+    }
+
+    public void setTstouchCnt(String tstouchCnt) {
+        this.tstouchCnt = tstouchCnt;
+    }
+
+    public LocalDate getTslatesttouchDt() {
+        return tslatesttouchDt;
+    }
+
+    public void setTslatesttouchDt(LocalDate tslatesttouchDt) {
+        this.tslatesttouchDt = tslatesttouchDt;
+    }
+
+    public String getTstotcasehrs() {
+        return tstotcasehrs;
+    }
+
+    public void setTstotcasehrs(String tstotcasehrs) {
+        this.tstotcasehrs = tstotcasehrs;
+    }
+
+    public String getCgpdateuid() {
+        return cgpdateuid;
+    }
+
+    public void setCgpdateuid(String cgpdateuid) {
+        this.cgpdateuid = cgpdateuid;
+    }
+
+    public LocalDate getCgplatestDt() {
+        return cgplatestDt;
+    }
+
+    public void setCgplatestDt(LocalDate cgplatestDt) {
+        this.cgplatestDt = cgplatestDt;
+    }
+
+    public String getCpstotcasehrs() {
+        return cpstotcasehrs;
+    }
+
+    public void setCpstotcasehrs(String cpstotcasehrs) {
+        this.cpstotcasehrs = cpstotcasehrs;
+    }
+
+    public String getTxpyrlnaddr() {
+        return txpyrlnaddr;
+    }
+
+    public void setTxpyrlnaddr(String txpyrlnaddr) {
+        this.txpyrlnaddr = txpyrlnaddr;
+    }
+
+    public String getFscntractorind() {
+        return fscntractorind;
+    }
+
+    public void setFscntractorind(String fscntractorind) {
+        this.fscntractorind = fscntractorind;
+    }
+
+    public String getIdenttheftind() {
+        return identtheftind;
+    }
+
+    public void setIdenttheftind(String identtheftind) {
+        this.identtheftind = identtheftind;
+    }
+
+    public String getEntfrnchtxCyd() {
+        return entfrnchtxCyd;
+    }
+
+    public void setEntfrnchtxCyd(String entfrnchtxCyd) {
+        this.entfrnchtxCyd = entfrnchtxCyd;
+    }
+
+    public BigDecimal getOverpymtintamt() {
+        return overpymtintamt;
+    }
+
+    public void setOverpymtintamt(BigDecimal overpymtintamt) {
+        this.overpymtintamt = overpymtintamt;
+    }
+
+    public String getLicind() {
+        return licind;
+    }
+
+    public void setLicind(String licind) {
+        this.licind = licind;
+    }
+
+    public String getCcidpselectCd() {
+        return ccidpselectCd;
+    }
+
+    public void setCcidpselectCd(String ccidpselectCd) {
+        this.ccidpselectCd = ccidpselectCd;
+    }
+
+    public String getForeignpstlaCd() {
+        return foreignpstlaCd;
+    }
+
+    public void setForeignpstlaCd(String foreignpstlaCd) {
+        this.foreignpstlaCd = foreignpstlaCd;
+    }
+
+    public String getPoppaytiescntty() {
+        return poppaytiescntty;
+    }
+
+    public void setPoppaytiescntty(String poppaytiescntty) {
+        this.poppaytiescntty = poppaytiescntty;
+    }
+
+    public LocalDate getOverageDt() {
+        return overageDt;
+    }
+
+    public void setOverageDt(LocalDate overageDt) {
+        this.overageDt = overageDt;
+    }
+
+    public LocalDate getPotentlamt() {
+        return potentlamt;
+    }
+
+    public void setPotentlamt(LocalDate potentlamt) {
+        this.potentlamt = potentlamt;
+    }
+
+    public String getRccorsulthoUcnt() {
+        return rccorsulthoUcnt;
+    }
+
+    public void setRccorsulthoUcnt(String rccorsulthoUcnt) {
+        this.rccorsulthoUcnt = rccorsulthoUcnt;
+    }
+
+    public String getCorratind() {
+        return corratind;
+    }
+
+    public void setCorratind(String corratind) {
+        this.corratind = corratind;
+    }
+
+    public String getEntfrnlsfflgind() {
+        return entfrnlsfflgind;
+    }
+
+    public void setEntfrnlsfflgind(String entfrnlsfflgind) {
+        this.entfrnlsfflgind = entfrnlsfflgind;
+    }
+
+    public String getTxpyrapprvdpgrmln1() {
+        return txpyrapprvdpgrmln1;
+    }
+
+    public void setTxpyrapprvdpgrmln1(String txpyrapprvdpgrmln1) {
+        this.txpyrapprvdpgrmln1 = txpyrapprvdpgrmln1;
+    }
+
+    public String getTxpyrapprvdpgrmln2() {
+        return txpyrapprvdpgrmln2;
+    }
+
+    public void setTxpyrapprvdpgrmln2(String txpyrapprvdpgrmln2) {
+        this.txpyrapprvdpgrmln2 = txpyrapprvdpgrmln2;
+    }
+
+    public LocalDate getTxpyrcasefieldDte() {
+        return txpyrcasefieldDte;
+    }
+
+    public void setTxpyrcasefieldDte(LocalDate txpyrcasefieldDte) {
+        this.txpyrcasefieldDte = txpyrcasefieldDte;
+    }
+
+    public BigDecimal getTxpyrcasefieldhours() {
+        return txpyrcasefieldhours;
+    }
+
+    public void setTxpyrcasefieldhours(BigDecimal txpyrcasefieldhours) {
+        this.txpyrcasefieldhours = txpyrcasefieldhours;
+    }
+
+    public String getFedepptind() {
+        return fedepptind;
+    }
+
+    public void setFedepptind(String fedepptind) {
+        this.fedepptind = fedepptind;
+    }
+
+    public String getIrsepptind() {
+        return irsepptind;
+    }
+
+    public void setIrsepptind(String irsepptind) {
+        this.irsepptind = irsepptind;
+    }
+
+    public String getFatcaind() {
+        return fatcaind;
+    }
+
+    public void setFatcaind(String fatcaind) {
+        this.fatcaind = fatcaind;
+    }
+
+    public LocalDate getDt_doo() {
+        return dt_doo;
+    }
+
+    public void setDt_doo(LocalDate dt_doo) {
+        this.dt_doo = dt_doo;
+    }
+
+    public BigDecimal getAgi_amt() {
+        return agi_amt;
+    }
+
+    public void setAgi_amt(BigDecimal agi_amt) {
+        this.agi_amt = agi_amt;
+    }
+
+    public BigDecimal getTpi_amt() {
+        return tpi_amt;
+    }
+
+    public void setTpi_amt(BigDecimal tpi_amt) {
+        this.tpi_amt = tpi_amt;
+    }
+
+    public String getAgi_tpi_tx_yr() {
+        return agi_tpi_tx_yr;
+    }
+
+    public void setAgi_tpi_tx_yr(String agi_tpi_tx_yr) {
+        this.agi_tpi_tx_yr = agi_tpi_tx_yr;
+    }
+
+    public String getEntfrwsursCd() {
+        return entfrwsursCd;
+    }
+
+    public void setEntfrwsursCd(String entfrwsursCd) {
+        this.entfrwsursCd = entfrwsursCd;
+    }
+}
