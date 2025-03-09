@@ -1,0 +1,96 @@
+# E1 Processor - Spring Batch Implementation
+
+This application is a Spring Batch implementation of the c.procE1 shell script. It handles the processing of E1 data files through SQL*Loader and performs various database operations to transform and load the data into the target tables.
+
+## Implementation Overview
+
+The implementation consists of the following key components:
+
+1. **E1BatchConfiguration** - Configuration for the initial E1 data loading
+2. **E1ProcessorConfig** - Configuration for the full E1 processing workflow
+3. **E1ProcessorService** - Service class handling the core processing logic
+4. **E1ProcessorRunner** - Command-line runner for executing the job
+5. **E1ProcessorController** - REST controller for manual triggering
+6. **E1ProcessorScheduler** - Scheduler for automated execution
+
+## Tasklets
+
+The application uses various tasklets to perform specific steps in the workflow:
+
+- **SqlRunnerTasklet** - Executes SQL statements
+- **E1ValidationTasklet** - Validates the SQL*Loader results
+- **TabFixTasklet** - Handles tab character removal
+- **ExternalCommandTasklet** - Executes external shell commands
+
+## Workflow Steps
+
+1. Truncate E1TMP table
+2. Load data using SQL*Loader (via Spring Batch)
+3. Check for SQL*Loader errors
+4. Fix tab characters in the loaded data
+5. Update fields in the E1TMP table
+6. Truncate destination tables (ENTTMP, TRANTMP)
+7. Populate ENTTMP table
+8. Merge data from ENTTMP into ENT
+9. Populate TRANTMP table
+
+## Configuration
+
+Key configuration properties in `application.properties`:
+
+```properties
+# Database Configuration
+spring.datasource.url=jdbc:oracle:thin:@localhost:1521:ORCL
+spring.datasource.username=username
+spring.datasource.password=password
+
+# Application-specific Configuration
+app.e1file.location=file:E1
+app.logdir=/als-ALS/app/entity/d.ICS/d.NEWDATA
+app.tmp.tab.fix.script=/als-ALS/app/execloc/d.loads/E1tmp_tab_fix
+
+# Scheduler Configuration
+app.scheduler.enabled=false
+app.scheduler.cron=0 0 0 * * ?  # Run at midnight every day
+```
+
+## Usage
+
+### Command Line
+
+To run the E1 processor from the command line:
+
+```
+java -jar e1-processor.jar --spring.profiles.active=cli
+```
+
+### Scheduled Execution
+
+To enable scheduled execution, set the following property:
+
+```
+app.scheduler.enabled=true
+```
+
+The default schedule is midnight every day, but can be configured using the `app.scheduler.cron` property.
+
+### REST API
+
+The application provides REST endpoints for manual triggering:
+
+- `POST /api/e1/process` - Trigger the full E1 processing job
+- `POST /api/e1/load` - Trigger just the E1 data loading
+
+## Requirements
+
+- Java 8 or higher
+- Oracle Database
+- Oracle SQL*Loader
+
+## Building
+
+```
+mvn clean package
+```
+
+This will create an executable JAR file in the `target` directory.
