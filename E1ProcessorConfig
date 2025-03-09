@@ -1,0 +1,274 @@
+package com.example.e1processor;
+
+import org.springframework.batch.core.Job;
+import org.springframework.batch.core.Step;
+import org.springframework.batch.core.configuration.annotation.EnableBatchProcessing;
+import org.springframework.batch.core.configuration.annotation.JobBuilderFactory;
+import org.springframework.batch.core.configuration.annotation.StepBuilderFactory;
+import org.springframework.batch.core.launch.support.RunIdIncrementer;
+import org.springframework.batch.core.step.tasklet.Tasklet;
+import org.springframework.batch.repeat.RepeatStatus;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.jdbc.core.JdbcTemplate;
+
+/**
+ * Spring configuration class for the E1 Processor
+ * Extends the batch configuration with additional jobs and steps
+ */
+@Configuration
+@EnableBatchProcessing
+public class E1ProcessorConfig {
+
+    @Autowired
+    private JobBuilderFactory jobBuilderFactory;
+
+    @Autowired
+    private StepBuilderFactory stepBuilderFactory;
+    
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+    
+    @Autowired
+    @Qualifier("importE1Job")
+    private Job importE1Job; // The job we already defined for loading E1 data
+    
+    /**
+     * Main processing job definition that orchestrates the entire flow
+     */
+    @Bean
+    public Job processE1Job(JobCompletionNotificationListener listener) {
+        return jobBuilderFactory.get("processE1Job")
+                .incrementer(new RunIdIncrementer())
+                .listener(listener)
+                .start(truncateE1TmpStep())
+                .next(importE1Job) // Use the existing importE1Job for loading data
+                .next(validateE1LoadStep())
+                .next(tabFixStep())
+                .next(updateE1TmpFieldsStep())
+                .next(truncateDestinationTablesStep())
+                .next(populateEntTmpStep())
+                .next(mergeIntoEntStep())
+                .next(populateTranTmpStep())
+                .build();
+    }
+    
+    /**
+     * Step to truncate E1TMP table before processing
+     */
+    @Bean
+    public Step truncateE1TmpStep() {
+        return stepBuilderFactory.get("truncateE1TmpStep")
+                .tasklet(new SqlRunnerTasklet(
+                        "TRUNCATE TABLE E1TMP",
+                        "Truncate E1TMP table"
+                ))
+                .build();
+    }
+    
+    /**
+     * Step to validate E1 data loading by checking error files
+     */
+    @Bean
+    public Step validateE1LoadStep() {
+        return stepBuilderFactory.get("validateE1LoadStep")
+                .tasklet(new E1ValidationTasklet())
+                .build();
+    }
+    
+    /**
+     * Step to fix tab characters in the E1TMP table
+     */
+    @Bean
+    public Step tabFixStep() {
+        return stepBuilderFactory.get("tabFixStep")
+                .tasklet(new TabFixTasklet())
+                .build();
+    }
+    
+    /**
+     * Step to update fields in E1TMP table
+     */
+    @Bean
+    public Step updateE1TmpFieldsStep() {
+        return stepBuilderFactory.get("updateE1TmpFieldsStep")
+                .tasklet((contribution, chunkContext) -> {
+                    // Execute all the UPDATE statements from the shell script
+                    jdbcTemplate.execute("UPDATE E1TMP SET TXPYRREPEATERIND = 'F' WHERE TXPYRREPEATERIND IS NULL");
+                    jdbcTemplate.execute("UPDATE E1TMP SET BOOCD = 'XX' WHERE BOOCD IS NULL");
+                    jdbcTemplate.execute("UPDATE E1TMP SET PMSLEVY = 'F' WHERE PMSLEVY IS NULL");
+                    jdbcTemplate.execute("UPDATE E1TMP SET DISASTERVICTIMCD = '0' WHERE DISASTERVICTIMCD IS NULL");
+                    jdbcTemplate.execute("UPDATE E1TMP SET OVERAGEIND = 'C' WHERE OVERAGEIND IS NULL");
+                    jdbcTemplate.execute("UPDATE E1TMP SET CFPDT = INITASGDT WHERE CFPDT = '01/01/1900'");
+                    jdbcTemplate.execute("UPDATE E1TMP SET INITASGDT = CFPDT WHERE INITASGDT > CFPDT");
+                    jdbcTemplate.execute("UPDATE E1TMP SET NAMECTRLCD = ' ' WHERE NAMECTRLCD IS NULL");
+                    jdbcTemplate.execute("UPDATE E1TMP SET FEDCONTRACTORIND = '0' WHERE FEDCONTRACTORIND IS NULL");
+                    jdbcTemplate.execute("UPDATE E1TMP SET IDENTTHEFTIND = '0' WHERE IDENTTHEFTIND IS NULL");
+                    jdbcTemplate.execute("UPDATE E1TMP SET ENTFRNCHNTRYCD = 'XX' WHERE ENTFRNCHNTRYCD IS NULL");
+                    jdbcTemplate.execute("UPDATE E1TMP SET OICACCEPTANCEYR = '0000' WHERE OICACCEPTANCEYR IS NULL");
+                    jdbcTemplate.execute("UPDATE E1TMP SET AGI_TPI_TX_YR = '0000' WHERE AGI_TPI_TX_YR IS NULL");
+                    jdbcTemplate.execute("UPDATE E1TMP SET ENTPRVSUBCASECD = '000' WHERE ENTPRVSUBCASECD IS NULL");
+                    jdbcTemplate.execute("UPDATE E1TMP SET DT_DOO = '01/01/1900' WHERE DT_DOO IS NULL");
+                    
+                    return RepeatStatus.FINISHED;
+                })
+                .build();
+    }
+    
+    /**
+     * Step to truncate destination tables
+     */
+    @Bean
+    public Step truncateDestinationTablesStep() {
+        return stepBuilderFactory.get("truncateDestinationTablesStep")
+                .tasklet((contribution, chunkContext) -> {
+                    jdbcTemplate.execute("TRUNCATE TABLE TRANTMP");
+                    jdbcTemplate.execute("TRUNCATE TABLE ENTTMP");
+                    return RepeatStatus.FINISHED;
+                })
+                .build();
+    }
+    
+    /**
+     * Step to populate ENTTMP table
+     */
+    @Bean
+    public Step populateEntTmpStep() {
+        return stepBuilderFactory.get("populateEntTmpStep")
+                .tasklet(new SqlRunnerTasklet(
+                        "INSERT INTO ENTTMP " +
+                        "(SELECT DISTINCT EXTRACTDT, NULL, TIN, FILESOURCECD, TINTYPE, TXPYRLN1NM, " +
+                        "TXPYRLN2NM, NAMECTRLCD, LNADDRESS, CITYNM, STATECD, TXPYRZIPCD, " +
+                        "ENTCASECD, ENTSRVCASECD, GRADELYLCD, RMSSCORENUM, TOTCASEAMT, INITASGDT, " +
+                        "TOUCHCNT, TOTALCASEHRS, CASEIDCD, OVERAGEIND, LIENCD, LARGEDOLLARIND, " +
+                        "PDTIND, TXPYRREPEATERIND, 0, PYRAMIDIND, PIACD, FRM1120SCD, FRM1065CD, " +
+                        "DISASTERVICTIMCD, INNOCENTSPOUSEIND, ERRFIND, PMSLEVY, IAREJECTDT, " +
+                        "LRGCMPLXCORPCD, CEPCD, BOOCD, BOOCLCD, SCRNYSUBRSCD, ENTCASECD, MIHRS, " +
+                        "WITOUCH, MILSTTCH, LW31IND, TSTOUCHCNT, TSLATESTTOUCHDT, TSTOTCASEHRS, " +
+                        "CCPTOUCHCNT, CCPLATESTTCHDT, CCPTOTCASEHRS, TXPYRLNADDR, " +
+                        "FEDCONTRACTORIND, IDENTTHEFTIND, ENTFRNCHNTRYCD, OICACCEPTANCEYR, LICIND, " +
+                        "CCNIPSELECTCD, FOREIGNPOSTALCD, FORPROVINCECNTRY, OVERAGEDT, POTENTIALOADT, " +
+                        "CORRAIND, ENTFRNLSFFLRIND, TXPYRAPPRVDPGRMLN1M, TXPYRAPPRVDPGRMLN2NM, FEDEMPIND, " +
+                        "IRSEMPIND, FATCAIND, DT_DOO, AGI_AMT, TPI_AMT, AGI_TPI_TX_YR, " +
+                        "ENTPRVSUBCASECD " +
+                        "FROM E1TMP)",
+                        "Populate ENTTMP table"
+                ))
+                .build();
+    }
+    
+    /**
+     * Step to merge data from ENTTMP into ENT
+     */
+    @Bean
+    public Step mergeIntoEntStep() {
+        return stepBuilderFactory.get("mergeIntoEntStep")
+                .tasklet(new SqlRunnerTasklet(
+                        "MERGE INTO ENT a " +
+                        "USING (/*+ use_hash */ SELECT * FROM ENTTMP) b " +
+                        "ON (a.TIN = b.TIN and a.TINIT = b.TINTYPE and a.TINFS = b.FILESOURCECD) " +
+                        "WHEN MATCHED THEN " +
+                        "  UPDATE SET a.TP=b.TXPYRLN1NM, a.CASEID=b.CASEIDCD, " +
+                        "    a.TPCTRL=b.NAMECTRLCD, a.TP2=b.TXPYRLN2NM, a.STREET=b.LNADDRESS, " +
+                        "    a.CITY=b.CITYNM, a.STATE=b.STATECD, a.ZIPCODE=b.TXPYRZIPCD, " +
+                        "    a.CASECODE=b.ENTCASECD, a.SUBCODE=b.ENTSRVCASECD, " +
+                        "    a.GRADE=b.GRADELYLCD, a.RMWS=b.RMSSCORENUM, " +
+                        "    a.TOTASSD=b.TOTCASEAMT, " +
+                        "    a.ASSNCFF=b.CFPDT, a.ASSNGRP=b.INITASGDT, " +
+                        "    a.TOTTOUCH=b.TOUCHCNT, a.TOTHRS=b.TOTALCASEHRS, " +
+                        "    a.AGEIND=b.OVERAGEIND, a.LFIIND=b.LIENCD, " +
+                        "    a.LDIND=b.LARGEDOLLARIND, a.PDTIND=b.PDTIND, " +
+                        "    a.RPTIND=b.TXPYRREPEATERIND, a.SELIND=b.SELECTIONCD, " +
+                        "    a.PYRIND=b.PYRAMIDIND, a.FR1120=b.FRM1120SCD, a.FR1065=b.FRM1065CD, " +
+                        "    a.EXTRDT=b.EXTRACTDT, a.DVICTCD=b.DISASTERVICTIMCD, " +
+                        "    a.INSPCTIND=b.INNOCENTSPOUSEIND, a.ERRFDIND=b.ERRFIND, " +
+                        "    a.FMSLVIND=b.PMSLEVY, a.IA_REJDT=b.IAREJECTDT, " +
+                        "    a.LGCORPCD=b.LRGCMPLXCORPCD, a.CEPCD=b.CEPCD, a.BOOCD=b.BOOCD, " +
+                        "    a.BODCLCD=b.BOOCLCD, a.STATUS='0', a.WIHRS=b.MIHRS, " +
+                        "    a.WITOUCH=b.WITOUCH, a.L903=b.LW31IND, a.TSTOUCH=b.TSTOUCHCNT, " +
+                        "    a.TSHRS=b.TSTOTCASEHRS, a.CCPTOUCH=b.CCPTOUCHCNT, " +
+                        "    a.CCPHRS=b.CCPTOTCASEHRS, a.STREET2=b.TXPYRLNADDR, " +
+                        "    a.FEDCOMIND=b.FEDCONTRACTORIND, a.THEFTIND=b.IDENTTHEFTIND, " +
+                        "    a.COUNTRY=b.ENTFRNCHNTRYCD, a.OICACCYR=b.OICACCEPTANCEYR, " +
+                        "    a.LLCIND=b.LICIND, a.CCNIPSELECTCD=b.CCNIPSELECTCD, " +
+                        "    a.FOREIGNPOSTALCD=b.FOREIGNPOSTALCD, " +
+                        "    a.FORPROVINCECNTRY=b.FORPROVINCECNTRY, a.DT_OA=b.DT_OA, " +
+                        "    a.DT_POA=b.DT_POA, a.COBRA=b.COBRA, a.FRVLS=b.FRVLS, " +
+                        "    a.PRGNAME1=b.TXPYRAPPRVDPGRMLN1M, a.PRGNAME2=b.TXPYRAPPRVDPGRMLN2NM, " +
+                        "    a.IRSEMPIND=b.IRSEMPIND, a.FEDEMPIND=b.FEDEMPIND, a.FATCAIND=b.FATCAIND, " +
+                        "    a.DT_DOO=b.DT_DOO, a.AGI_AMT=b.AGI_AMT, " +
+                        "    a.TPI_AMT=b.TPI_AMT, a.AGI_TPI_TX_YR=b.AGI_TPI_TX_YR, " +
+                        "    a.PRVSUBCODE=b.ENTPRVSUBCASECD " +
+                        "WHEN NOT MATCHED THEN " +
+                        "  INSERT (TINSID, TIN, TINIT, TINFS, CASEID, TP, TPCTRL, TP2, " +
+                        "    STREET, CITY, STATE, ZIPCODE, STATUS, CASECODE, SUBCODE, GRADE, RMWS, " +
+                        "    TOTASSD, ASSNCFF, ASSNGRP, TOTTOUCH, TOTHRS, " +
+                        "    AGEIND, LFIIND, LDIND, PDTIND, RPTIND, SELIND, PYRIND, FR1120, " +
+                        "    FR1065, EXTRDT, DVICTCD, INSPCTIND, ERRFDIND, FMSLVIND, IA_REJDT, " +
+                        "    LGCORPCD, CEPCD, BOOCD, BODCLCD, WIHRS, WITOUCH, L903, TSTOUCH, " +
+                        "    TSHRS, CCPTOUCH, CCPHRS, STREET2, FEDCOMIND, THEFTIND, COUNTRY, " +
+                        "    OICACCYR, LLCIND, CCNIPSELECTCD, FOREIGNPOSTALCD, FORPROVINCECNTRY, " +
+                        "    DT_OA, DT_POA, COBRA, FRVLS, PRGNAME1, PRGNAME2, IRSEMPIND, FEDEMPIND, FATCAIND, " +
+                        "    DT_DOO, AGI_AMT, TPI_AMT, AGI_TPI_TX_YR, PRVSUBCODE) " +
+                        "  VALUES (TINSIDcnt.nextval, b.TIN, b.TINTYPE, b.FILESOURCECD, b.CASEIDCD, " +
+                        "    b.TXPYRLN1NM, b.NAMECTRLCD, b.TXPYRLN2NM, " +
+                        "    b.LNADDRESS, b.CITYNM, b.STATECD, b.TXPYRZIPCD, '0', " +
+                        "    b.ENTCASECD, b.ENTSRVCASECD, b.GRADELYLCD, " +
+                        "    b.RMSSCORENUM, b.TOTCASEAMT, b.CFPDT, b.INITASGDT, " +
+                        "    b.TOUCHCNT, b.TOTALCASEHRS, b.OVERAGEIND, b.LIENCD, " +
+                        "    b.LARGEDOLLARIND, b.PDTIND, b.TXPYRREPEATERIND, b.SELECTIONCD, " +
+                        "    b.PYRAMIDIND, b.FRM1120SCD, b.FRM1065CD, b.EXTRACTDT, b.DISASTERVICTIMCD, " +
+                        "    b.INNOCENTSPOUSEIND, b.ERRFIND, b.PMSLEVY, b.IAREJECTDT, " +
+                        "    b.LRGCMPLXCORPCD, b.CEPCD, b.BOOCD, b.BOOCLCD, b.MIHRS, " +
+                        "    b.WITOUCH, b.LW31IND, b.TSTOUCHCNT, b.TSTOTCASEHRS, b.CCPTOUCHCNT, " +
+                        "    b.CCPTOTCASEHRS,b.TXPYRLNADDR,b.FEDCONTRACTORIND,b.IDENTTHEFTIND, " +
+                        "    b.ENTFRNCHNTRYCD, b.OICACCEPTANCEYR, b.LICIND, b.CCNIPSELECTCD, " +
+                        "    b.FOREIGNPOSTALCD, b.FORPROVINCECNTRY, b.DT_OA, b.DT_POA, " +
+                        "    b.COBRA, b.FRVLS, b.TXPYRAPPRVDPGRMLN1M, b.TXPYRAPPRVDPGRMLN2NM, " +
+                        "    b.IRSEMPIND, b.FEDEMPIND, b.FATCAIND, b.DT_DOO, b.AGI_AMT, " +
+                        "    b.TPI_AMT, b.AGI_TPI_TX_YR, b.ENTPRVSUBCASECD)",
+                        "Merge data from ENTTMP into ENT table"
+                ))
+                .build();
+    }
+    
+    /**
+     * Step to populate TRANTMP table
+     */
+    @Bean
+    public Step populateTranTmpStep() {
+        return stepBuilderFactory.get("populateTranTmpStep")
+                .tasklet(new SqlRunnerTasklet(
+                        "INSERT INTO TRANTMP " +
+                        "(SELECT EXTRACTDT, TIN, FILESOURCECD, TINTYPE, NULL, ASGMTNUM, SCNDRYASGMTIND, " +
+                        "ROASIGTMDT, CYCTEUCHCNT, INPUTHRS, INITCONTACTUEDT, INITCONTACTDT, " +
+                        "'01/01/1900', NALCCD, NALCEVALCD, NALCSYR, LATESTTOUCHDT, TXPYRZIPCD, " +
+                        "TXPYRCASEFIELDDATE, TXPYRCASEFIELDHOURS, RCCORSULTHOUCNT " +
+                        "FROM E1TMP)",
+                        "Populate TRANTMP table from E1TMP"
+                ))
+                .build();
+    }
+    
+    /**
+     * Step to verify record counts 
+     */
+    @Bean
+    public Step verifyRecordCountsStep() {
+        return stepBuilderFactory.get("verifyRecordCountsStep")
+                .tasklet((contribution, chunkContext) -> {
+                    // Get counts from tables for verification and logging
+                    Integer entCount = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM ENT", Integer.class);
+                    Integer tranCount = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM TRANTMP", Integer.class);
+                    
+                    // Log the counts for verification
+                    contribution.getStepExecution().getExecutionContext().putInt("entCount", entCount);
+                    contribution.getStepExecution().getExecutionContext().putInt("tranCount", tranCount);
+                    
+                    return RepeatStatus.FINISHED;
+                })
+                .build();
+    }
+}
