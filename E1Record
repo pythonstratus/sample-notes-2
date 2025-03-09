@@ -5,7 +5,7 @@ import java.time.LocalDate;
 
 public class E1Record {
     private String outputcd;
-    private LocalDate extractDt;
+    private LocalDate extractDt
     private LocalDate rptendinodt;
     private String tin;
     private String filesourceCd;
@@ -328,12 +328,12 @@ public class E1Record {
         this.overageDtind = overageDtind;
     }
 
-    public String getLiehCd() {
-        return liehCd;
+    public String getLienCd() {
+        return lienCd;
     }
 
-    public void setLiehCd(String liehCd) {
-        this.liehCd = liehCd;
+    public void setLienCd(String lienCd) {
+        this.lienCd = lienCd;
     }
 
     public String getLargedollarind() {
