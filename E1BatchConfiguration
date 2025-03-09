@@ -1,0 +1,246 @@
+package com.example.e1processor;
+
+import org.springframework.batch.core.Job;
+import org.springframework.batch.core.Step;
+import org.springframework.batch.core.configuration.annotation.EnableBatchProcessing;
+import org.springframework.batch.core.configuration.annotation.JobBuilderFactory;
+import org.springframework.batch.core.configuration.annotation.StepBuilderFactory;
+import org.springframework.batch.core.launch.support.RunIdIncrementer;
+import org.springframework.batch.item.database.BeanPropertyItemSqlParameterSourceProvider;
+import org.springframework.batch.item.database.JdbcBatchItemWriter;
+import org.springframework.batch.item.file.FlatFileItemReader;
+import org.springframework.batch.item.file.LineMapper;
+import org.springframework.batch.item.file.mapping.BeanWrapperFieldSetMapper;
+import org.springframework.batch.item.file.mapping.DefaultLineMapper;
+import org.springframework.batch.item.file.mapping.FieldSetMapper;
+import org.springframework.batch.item.file.transform.FixedLengthTokenizer;
+import org.springframework.batch.item.file.transform.Range;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.jdbc.core.JdbcTemplate;
+
+import javax.sql.DataSource;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.util.function.Function;
+
+@Configuration
+@EnableBatchProcessing
+public class E1BatchConfiguration {
+
+    @Autowired
+    public JobBuilderFactory jobBuilderFactory;
+
+    @Autowired
+    public StepBuilderFactory stepBuilderFactory;
+
+    @Autowired
+    public DataSource dataSource;
+
+    private static final String E1_FILE_PATH = "file:E1";
+    private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd");
+
+    @Bean
+    public FlatFileItemReader<E1Record> reader() {
+        FlatFileItemReader<E1Record> reader = new FlatFileItemReader<>();
+        reader.setResource(new FileSystemResource(E1_FILE_PATH));
+        reader.setLineMapper(lineMapper());
+        return reader;
+    }
+
+    @Bean
+    public LineMapper<E1Record> lineMapper() {
+        DefaultLineMapper<E1Record> lineMapper = new DefaultLineMapper<>();
+        lineMapper.setLineTokenizer(fixedLengthTokenizer());
+        lineMapper.setFieldSetMapper(fieldSetMapper());
+        return lineMapper;
+    }
+
+    @Bean
+    public FixedLengthTokenizer fixedLengthTokenizer() {
+        FixedLengthTokenizer tokenizer = new FixedLengthTokenizer();
+        tokenizer.setNames(
+                "outputcd", "extractDt", "rptendinodt", "tin", "filesourceCd", "tintype", "ascrtnDn", "scrnyasgntind",
+                "txpyrln1nm", "txpyrln2nm", "namectrlCd", "lnaddress", "cityNm", "stateCd", "txpyrzipCd", "entcaseCd",
+                "entsrvcaseCd", "gradelylCd", "rmsscorelnNm", "totcaseamt", "initasgDt", "roasigtmDt", "cycteuchcnt",
+                "touchcnt", "latesttouchDt", "inputhrs", "totalcasehrs", "caseidCd", "overageDtind", "liehCd",
+                "largedollarind", "pdtind", "txpyrrepeaterind", "selectiomCd", "pyramidind", "piaCd", "frm1120sCd",
+                "frm1065Cd", "cpsdt", "disastervictimCd", "innocentspouseind", "errfind", "pmslevy", "iarejectDt",
+                "lrgcmplxcorpCd", "cepCd", "booCd", "booclCd", "scrnysubrsCd", "nalciCd", "nalcevalCd", "nalcsyr",
+                "initcontactuedt", "initcontactDt", "mihrs", "netpaCh", "milstDt", "lw31ind", "tstouchCnt",
+                "tslatesttouchDt", "tstotcasehrs", "cgpdateuid", "cgplatestDt", "cpstotcasehrs", "txpyrlnaddr",
+                "fscntractorind", "identtheftind", "entfrnchtxCyd", "overpymtintamt", "licind", "ccidpselectCd",
+                "foreignpstlaCd", "poppaytiescntty", "overageDt", "potentlamt", "rccorsulthoUcnt", "corratind",
+                "entfrnlsfflgind", "txpyrapprvdpgrmln1", "txpyrapprvdpgrmln2", "txpyrcasefieldDte",
+                "txpyrcasefieldhours", "fedepptind", "irsepptind", "fatcaind", "dt_doo", "agi_amt", "tpi_amt",
+                "agi_tpi_tx_yr", "entfrwsursCd"
+        );
+
+        tokenizer.setColumns(
+                new Range(1, 2),      // outputcd
+                new Range(3, 10),     // extractDt
+                new Range(11, 18),    // rptendinodt
+                new Range(19, 27),    // tin
+                new Range(28, 28),    // filesourceCd
+                new Range(29, 29),    // tintype
+                new Range(30, 37),    // ascrtnDn
+                new Range(38, 38),    // scrnyasgntind
+                new Range(39, 73),    // txpyrln1nm
+                new Range(74, 108),   // txpyrln2nm
+                new Range(109, 112),  // namectrlCd
+                new Range(113, 147),  // lnaddress
+                new Range(148, 169),  // cityNm
+                new Range(170, 171),  // stateCd
+                new Range(172, 183),  // txpyrzipCd
+                new Range(184, 186),  // entcaseCd
+                new Range(187, 189),  // entsrvcaseCd
+                new Range(190, 191),  // gradelylCd
+                new Range(192, 198),  // rmsscorelnNm
+                new Range(199, 214),  // totcaseamt
+                new Range(215, 222),  // initasgDt
+                new Range(223, 230),  // roasigtmDt
+                new Range(231, 232),  // cycteuchcnt
+                new Range(233, 236),  // touchcnt
+                new Range(237, 244),  // latesttouchDt
+                new Range(245, 250),  // inputhrs
+                new Range(251, 256),  // totalcasehrs
+                new Range(257, 257),  // caseidCd
+                new Range(258, 258),  // overageDtind
+                new Range(259, 262),  // liehCd
+                new Range(263, 266),  // largedollarind
+                new Range(267, 267),  // pdtind
+                new Range(268, 271),  // txpyrrepeaterind
+                new Range(272, 272),  // selectiomCd
+                new Range(273, 280),  // pyramidind
+                new Range(281, 284),  // piaCd
+                new Range(285, 286),  // frm1120sCd
+                new Range(287, 288),  // frm1065Cd
+                new Range(289, 296),  // cpsdt
+                new Range(297, 297),  // disastervictimCd
+                new Range(298, 301),  // innocentspouseind
+                new Range(302, 305),  // errfind
+                new Range(306, 309),  // pmslevy
+                new Range(310, 317),  // iarejectDt
+                new Range(318, 319),  // lrgcmplxcorpCd
+                new Range(320, 321),  // cepCd
+                new Range(322, 323),  // booCd
+                new Range(324, 326),  // booclCd
+                new Range(327, 329),  // scrnysubrsCd
+                new Range(330, 335),  // nalciCd
+                new Range(336, 339),  // nalcevalCd
+                new Range(340, 343),  // nalcsyr
+                new Range(344, 351),  // initcontactuedt
+                new Range(352, 359),  // initcontactDt
+                new Range(360, 365),  // mihrs
+                new Range(366, 368),  // netpaCh
+                new Range(369, 376),  // milstDt
+                new Range(377, 377),  // lw31ind
+                new Range(378, 381),  // tstouchCnt
+                new Range(382, 389),  // tslatesttouchDt
+                new Range(390, 395),  // tstotcasehrs
+                new Range(396, 396),  // cgpdateuid
+                new Range(397, 404),  // cgplatestDt
+                new Range(405, 410),  // cpstotcasehrs
+                new Range(411, 445),  // txpyrlnaddr
+                new Range(446, 446),  // fscntractorind
+                new Range(447, 447),  // identtheftind
+                new Range(448, 453),  // entfrnchtxCyd
+                new Range(454, 466),  // overpymtintamt
+                new Range(467, 470),  // licind
+                new Range(471, 471),  // ccidpselectCd
+                new Range(472, 487),  // foreignpstlaCd
+                new Range(488, 504),  // poppaytiescntty
+                new Range(505, 512),  // overageDt
+                new Range(513, 520),  // potentlamt
+                new Range(521, 524),  // rccorsulthoUcnt
+                new Range(525, 525),  // corratind
+                new Range(526, 526),  // entfrnlsfflgind
+                new Range(527, 576),  // txpyrapprvdpgrmln1
+                new Range(577, 626),  // txpyrapprvdpgrmln2
+                new Range(627, 634),  // txpyrcasefieldDte
+                new Range(635, 640),  // txpyrcasefieldhours
+                new Range(641, 642),  // fedepptind
+                new Range(643, 647),  // irsepptind
+                new Range(648, 648),  // fatcaind
+                new Range(649, 656),  // dt_doo
+                new Range(657, 667),  // agi_amt
+                new Range(668, 678),  // tpi_amt
+                new Range(679, 686),  // agi_tpi_tx_yr
+                new Range(687, 690)   // entfrwsursCd
+        );
+        
+        return tokenizer;
+    }
+
+    @Bean
+    public FieldSetMapper<E1Record> fieldSetMapper() {
+        E1RecordFieldSetMapper mapper = new E1RecordFieldSetMapper();
+        return mapper;
+    }
+
+    @Bean
+    public E1RecordProcessor processor() {
+        return new E1RecordProcessor();
+    }
+
+    @Bean
+    public JdbcBatchItemWriter<E1Record> writer() {
+        JdbcBatchItemWriter<E1Record> writer = new JdbcBatchItemWriter<>();
+        writer.setItemSqlParameterSourceProvider(new BeanPropertyItemSqlParameterSourceProvider<>());
+        writer.setDataSource(dataSource);
+        writer.setSql("REPLACE INTO E1TMP (" +
+                "OUTPUTCD, EXTRACTDT, RPTENDINODT, TIN, FILESOURCECD, TINTYPE, ASCRTNDN, SCRNYASGNTIND, " +
+                "TXPYRLN1NM, TXPYRLN2NM, NAMECTRLCD, LNADDRESS, CITYNM, STATECD, TXPYRZIPCD, ENTCASECD, " +
+                "ENTSRVCASECD, GRADELYLCD, RMSSCORELNNM, TOTCASEAMT, INITASGDT, ROASIGTMDT, CYCTEUCHCNT, " +
+                "TOUCHCNT, LATESTTOUCHDT, INPUTHRS, TOTALCASEHRS, CASEIDCD, OVERAGEDTIND, LIEHCD, " +
+                "LARGEDOLLARIND, PDTIND, TXPYRREPEATERIND, SELECTIOMCD, PYRAMIDIND, PIACD, FRM1120SCD, " +
+                "FRM1065CD, CPSDT, DISASTERVICTIMCD, INNOCENTSPOUSEIND, ERRFIND, PMSLEVY, IAREJECTDT, " +
+                "LRGCMPLXCORPCD, CEPCD, BOOCD, BOOCLCD, SCRNYSUBRSCD, NALCICD, NALCEVALCD, NALCSYR, " +
+                "INITCONTACTUEDT, INITCONTACTDT, MIHRS, NETPACH, MILSTDT, LW31IND, TSTOUCHCNT, " +
+                "TSLATESTTOUCHDT, TSTOTCASEHRS, CGPDATEUID, CGPLATESTDT, CPSTOTCASEHRS, TXPYRLNADDR, " +
+                "FSCNTRACTORIND, IDENTTHEFTIND, ENTFRNCHTXCYD, OVERPYMTINTAMT, LICIND, CCIDPSELECTCD, " +
+                "FOREIGNPSTLACD, POPPAYTIESCNTTY, OVERAGEDT, POTENTLAMT, RCCORSULTHOUCNT, CORRATIND, " +
+                "ENTFRNLSFFLGIND, TXPYRAPPRVDPGRMLN1, TXPYRAPPRVDPGRMLN2, TXPYRCASEFIELDDTE, " +
+                "TXPYRCASEFIELDHOURS, FEDEPPTIND, IRSEPPTIND, FATCAIND, DT_DOO, AGI_AMT, TPI_AMT, " +
+                "AGI_TPI_TX_YR, ENTFRWSURSCD" +
+                ") VALUES (" +
+                ":outputcd, :extractDt, :rptendinodt, :tin, :filesourceCd, :tintype, :ascrtnDn, :scrnyasgntind, " +
+                ":txpyrln1nm, :txpyrln2nm, :namectrlCd, :lnaddress, :cityNm, :stateCd, :txpyrzipCd, :entcaseCd, " +
+                ":entsrvcaseCd, :gradelylCd, :rmsscorelnNm, :totcaseamt, :initasgDt, :roasigtmDt, :cycteuchcnt, " +
+                ":touchcnt, :latesttouchDt, :inputhrs, :totalcasehrs, :caseidCd, :overageDtind, :liehCd, " +
+                ":largedollarind, :pdtind, :txpyrrepeaterind, :selectiomCd, :pyramidind, :piaCd, :frm1120sCd, " +
+                ":frm1065Cd, :cpsdt, :disastervictimCd, :innocentspouseind, :errfind, :pmslevy, :iarejectDt, " +
+                ":lrgcmplxcorpCd, :cepCd, :booCd, :booclCd, :scrnysubrsCd, :nalciCd, :nalcevalCd, :nalcsyr, " +
+                ":initcontactuedt, :initcontactDt, :mihrs, :netpaCh, :milstDt, :lw31ind, :tstouchCnt, " +
+                ":tslatesttouchDt, :tstotcasehrs, :cgpdateuid, :cgplatestDt, :cpstotcasehrs, :txpyrlnaddr, " +
+                ":fscntractorind, :identtheftind, :entfrnchtxCyd, :overpymtintamt, :licind, :ccidpselectCd, " +
+                ":foreignpstlaCd, :poppaytiescntty, :overageDt, :potentlamt, :rccorsulthoUcnt, :corratind, " +
+                ":entfrnlsfflgind, :txpyrapprvdpgrmln1, :txpyrapprvdpgrmln2, :txpyrcasefieldDte, " +
+                ":txpyrcasefieldhours, :fedepptind, :irsepptind, :fatcaind, :dt_doo, :agi_amt, :tpi_amt, " +
+                ":agi_tpi_tx_yr, :entfrwsursCd" +
+                ")");
+        return writer;
+    }
+
+    @Bean
+    public Job importE1Job(JobCompletionNotificationListener listener, Step step1) {
+        return jobBuilderFactory.get("importE1Job")
+                .incrementer(new RunIdIncrementer())
+                .listener(listener)
+                .flow(step1)
+                .end()
+                .build();
+    }
+
+    @Bean
+    public Step step1(JdbcBatchItemWriter<E1Record> writer) {
+        return stepBuilderFactory.get("step1")
+                .<E1Record, E1Record>chunk(10)
+                .reader(reader())
+                .processor(processor())
+                .writer(writer)
+                .build();
+    }
+}
