@@ -65,7 +65,7 @@ public class E1BatchConfiguration {
                 "outputcd", "extractDt", "rptendinodt", "tin", "filesourceCd", "tintype", "ascrtnDn", "scrnyasgntind",
                 "txpyrln1nm", "txpyrln2nm", "namectrlCd", "lnaddress", "cityNm", "stateCd", "txpyrzipCd", "entcaseCd",
                 "entsrvcaseCd", "gradelylCd", "rmsscorelnNm", "totcaseamt", "initasgDt", "roasigtmDt", "cycteuchcnt",
-                "touchcnt", "latesttouchDt", "inputhrs", "totalcasehrs", "caseidCd", "overageDtind", "liehCd",
+                "touchcnt", "latesttouchDt", "inputhrs", "totalcasehrs", "caseidCd", "overageDtind", "lienCd",
                 "largedollarind", "pdtind", "txpyrrepeaterind", "selectiomCd", "pyramidind", "piaCd", "frm1120sCd",
                 "frm1065Cd", "cpsdt", "disastervictimCd", "innocentspouseind", "errfind", "pmslevy", "iarejectDt",
                 "lrgcmplxcorpCd", "cepCd", "booCd", "booclCd", "scrnysubrsCd", "nalciCd", "nalcevalCd", "nalcsyr",
@@ -108,7 +108,7 @@ public class E1BatchConfiguration {
                 new Range(251, 256),  // totalcasehrs
                 new Range(257, 257),  // caseidCd
                 new Range(258, 258),  // overageDtind
-                new Range(259, 262),  // liehCd
+                new Range(259, 262),  // lienCd
                 new Range(263, 266),  // largedollarind
                 new Range(267, 267),  // pdtind
                 new Range(268, 271),  // txpyrrepeaterind
@@ -194,7 +194,7 @@ public class E1BatchConfiguration {
                 "OUTPUTCD, EXTRACTDT, RPTENDINODT, TIN, FILESOURCECD, TINTYPE, ASCRTNDN, SCRNYASGNTIND, " +
                 "TXPYRLN1NM, TXPYRLN2NM, NAMECTRLCD, LNADDRESS, CITYNM, STATECD, TXPYRZIPCD, ENTCASECD, " +
                 "ENTSRVCASECD, GRADELYLCD, RMSSCORELNNM, TOTCASEAMT, INITASGDT, ROASIGTMDT, CYCTEUCHCNT, " +
-                "TOUCHCNT, LATESTTOUCHDT, INPUTHRS, TOTALCASEHRS, CASEIDCD, OVERAGEDTIND, LIEHCD, " +
+                "TOUCHCNT, LATESTTOUCHDT, INPUTHRS, TOTALCASEHRS, CASEIDCD, OVERAGEDTIND, LIENCD, " +
                 "LARGEDOLLARIND, PDTIND, TXPYRREPEATERIND, SELECTIOMCD, PYRAMIDIND, PIACD, FRM1120SCD, " +
                 "FRM1065CD, CPSDT, DISASTERVICTIMCD, INNOCENTSPOUSEIND, ERRFIND, PMSLEVY, IAREJECTDT, " +
                 "LRGCMPLXCORPCD, CEPCD, BOOCD, BOOCLCD, SCRNYSUBRSCD, NALCICD, NALCEVALCD, NALCSYR, " +
@@ -209,7 +209,7 @@ public class E1BatchConfiguration {
                 ":outputcd, :extractDt, :rptendinodt, :tin, :filesourceCd, :tintype, :ascrtnDn, :scrnyasgntind, " +
                 ":txpyrln1nm, :txpyrln2nm, :namectrlCd, :lnaddress, :cityNm, :stateCd, :txpyrzipCd, :entcaseCd, " +
                 ":entsrvcaseCd, :gradelylCd, :rmsscorelnNm, :totcaseamt, :initasgDt, :roasigtmDt, :cycteuchcnt, " +
-                ":touchcnt, :latesttouchDt, :inputhrs, :totalcasehrs, :caseidCd, :overageDtind, :liehCd, " +
+                ":touchcnt, :latesttouchDt, :inputhrs, :totalcasehrs, :caseidCd, :overageDtind, :lienCd, " +
                 ":largedollarind, :pdtind, :txpyrrepeaterind, :selectiomCd, :pyramidind, :piaCd, :frm1120sCd, " +
                 ":frm1065Cd, :cpsdt, :disastervictimCd, :innocentspouseind, :errfind, :pmslevy, :iarejectDt, " +
                 ":lrgcmplxcorpCd, :cepCd, :booCd, :booclCd, :scrnysubrsCd, :nalciCd, :nalcevalCd, :nalcsyr, " +
