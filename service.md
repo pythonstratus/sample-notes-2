@@ -1,5 +1,5 @@
 ## Project structure 
-`
+<pre>
 entity-service-recent/
 ├── .vscode/
 ├── src/
@@ -157,4 +157,4 @@ entity-service-recent/
 ├── pom.xml
 ├── README.JOE.MD
 └── README.MD
-`
+</pre>
