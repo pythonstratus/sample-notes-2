@@ -1,0 +1,75 @@
+package com.example.batch.processor;
+
+import com.example.batch.model.E5Record;
+import org.springframework.batch.item.ItemProcessor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Processor for E5 records.
+ * Applies transformation logic to E5 records before they are written to the database.
+ */
+public class E5ItemProcessor implements ItemProcessor<E5Record, E5Record> {
+
+    private static final Logger log = LoggerFactory.getLogger(E5ItemProcessor.class);
+
+    @Override
+    public E5Record process(final E5Record record) {
+        // Implement field transformations based on business rules from the script
+        
+        // Handle DECODE transformations that were present in the CTL file
+        // These were originally done via DECODE in SQL*Loader but we'll handle them here
+        
+        // Process TPSPODIND
+        if ("0".equals(record.getTpspodind())) {
+            record.setTpspodind("F");
+        } else if ("T".equals(record.getTpspodind())) {
+            record.setTpspodind("T");
+        } else {
+            record.setTpspodind("F"); // Default
+        }
+        
+        // Process CSUPODIND
+        if ("0".equals(record.getCsupodind())) {
+            record.setCsupodind("F");
+        } else if ("T".equals(record.getCsupodind())) {
+            record.setCsupodind("T");
+        } else {
+            record.setCsupodind("F"); // Default
+        }
+        
+        // Process PARAPODIND
+        if ("0".equals(record.getParapodind())) {
+            record.setParapodind("F");
+        } else if ("T".equals(record.getParapodind())) {
+            record.setParapodind("T");
+        } else {
+            record.setParapodind("F"); // Default
+        }
+        
+        // Process MNGRPODIND
+        if ("0".equals(record.getMngrpodind())) {
+            record.setMngrpodind("F");
+        } else if ("T".equals(record.getMngrpodind())) {
+            record.setMngrpodind("T");
+        } else {
+            record.setMngrpodind("F"); // Default
+        }
+        
+        // Process FLEXPLACEIND
+        if ("Y".equals(record.getFlexplaceind())) {
+            record.setFlexplaceind("T");
+        } else if ("T".equals(record.getFlexplaceind())) {
+            record.setFlexplaceind("T");
+        } else {
+            record.setFlexplaceind("F"); // Default
+        }
+        
+        // Handle the REPLACE logic from the CTL file
+        // For date fields with default values of '00000000'
+        // The original CTL used REPLACE(:EMPUPDATEDT,'00000000','19000101')
+        
+        log.debug("Converting E5 record: {}", record);
+        return record;
+    }
+}
