@@ -1,0 +1,860 @@
+import java.io.*;
+import java.sql.*;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * Interface for entity processors
+ * All entity processors must implement this interface
+ */
+interface EntityProcessor {
+    /**
+     * Get the entity code
+     */
+    String getEntityCode();
+    
+    /**
+     * Get the output file path
+     */
+    String getOutputFilePath();
+    
+    /**
+     * Process the entity extract
+     */
+    boolean process() throws Exception;
+}
+
+/**
+ * ProcessE3Entity - Java implementation of the c.procE3 script
+ * This class handles the loading and processing of E3 entity data
+ */
+public class ProcessE3Entity implements EntityProcessor {
+    
+    private String loadDir;      // Load directory where data files are located
+    private String logDir;       // Log directory
+    private String dbPassword;   // Database password
+    private String jdbcUrl;      // JDBC connection URL
+    private String dbUser;       // Database username (als)
+    private String e3OutFile;    // E3 output file path
+    private String e3BadFile;    // E3 bad records file path
+    private String e3LogFile;    // E3 load log file path
+    private String e3DatFile;    // E3 data file to load
+
+    /**
+     * Constructor for the E3 processing class
+     * 
+     * @param loadDir Directory containing the data files
+     * @param logDir Directory for log files
+     * @param dbUser Database username
+     * @param dbPassword Database password
+     * @param jdbcUrl JDBC URL for database connection
+     */
+    public ProcessE3Entity(String loadDir, String logDir, String dbUser, String dbPassword, String jdbcUrl) {
+        this.loadDir = loadDir;
+        this.logDir = logDir;
+        this.dbUser = dbUser;
+        this.dbPassword = dbPassword;
+        this.jdbcUrl = jdbcUrl;
+        
+        // Set file paths
+        this.e3OutFile = loadDir + "/E3.out";
+        this.e3BadFile = loadDir + "/E3.bad";
+        this.e3LogFile = loadDir + "/loadE3.log";
+        this.e3DatFile = loadDir + "/E3.dat";
+    }
+    
+    /**
+     * Get the entity code
+     * 
+     * @return the entity code (E3)
+     */
+    @Override
+    public String getEntityCode() {
+        return "E3";
+    }
+    
+    /**
+     * Get the output file path
+     * 
+     * @return the path to the output file
+     */
+    @Override
+    public String getOutputFilePath() {
+        return e3OutFile;
+    }
+    
+    /**
+     * Process the E3 entity extract
+     * 
+     * @return true if processing was successful, false otherwise
+     */
+    @Override
+    public boolean process() throws Exception {
+        try {
+            // Start logging
+            writeToFile(e3OutFile, "Begin process c.procE3..........." + getCurrentDateTime() + "\n\n");
+            
+            // Check if input file exists
+            File dataFile = new File(e3DatFile);
+            if (!dataFile.exists() || !dataFile.canRead()) {
+                writeToFile(e3OutFile, "ERROR: E3 data file not found or not readable: " + e3DatFile + "\n");
+                return false;
+            }
+            
+            // First, use JDBC to directly load data using prepared statements
+            // This replaces the SQL*Loader operation from the shell script
+            boolean loadSuccess = loadE3DataFile();
+            if (!loadSuccess) {
+                writeToFile(e3OutFile, "ERROR: Failed to load E3 data\n");
+                return false;
+            }
+            
+            // Check for bad records in E3.bad file
+            int badRecords = checkForBadRecords();
+            if (badRecords > 0) {
+                writeToFile(e3OutFile, "ERROR: c.procE3 sqldr - " + badRecords + " records in E3.bad\n");
+                return false;
+            }
+            
+            // Run the SQL operations
+            boolean sqlSuccess = executeE3SqlOperations();
+            if (!sqlSuccess) {
+                writeToFile(e3OutFile, "ERROR: SQL operations failed\n");
+                return false;
+            }
+            
+            // Create LOGLOAD record
+            boolean logSuccess = createLogloadRecord();
+            if (!logSuccess) {
+                writeToFile(e3OutFile, "ERROR: Failed to create LOGLOAD record\n");
+                return false;
+            }
+            
+            // Complete processing
+            writeToFile(e3OutFile, "End process c.procE3..........." + getCurrentDateTime() + "\n");
+            writeToFile(e3OutFile, "PROCESS COMPLETE\n");
+            
+            return true;
+        } catch (Exception e) {
+            try {
+                writeToFile(e3OutFile, "ERROR: Exception in E3 processing: " + e.getMessage() + "\n");
+                e.printStackTrace(new PrintWriter(new FileWriter(e3OutFile, true), true));
+            } catch (IOException ioe) {
+                // Can't even write to output file
+                System.err.println("Error writing to output file: " + ioe.getMessage());
+            }
+            return false;
+        }
+    }
+    
+    /**
+     * Load E3 data file into the E3TMP table
+     * This replaces the SQL*Loader operation from the shell script
+     */
+    private boolean loadE3DataFile() throws SQLException, IOException {
+        Connection conn = null;
+        PreparedStatement truncateStmt = null;
+        PreparedStatement ps = null;
+        
+        try {
+            // Connect to database
+            conn = DriverManager.getConnection(jdbcUrl, dbUser, dbPassword);
+            
+            // First truncate the E3TMP table
+            writeToFile(e3OutFile, "Truncate E3TMP Table\n");
+            truncateStmt = conn.prepareStatement("TRUNCATE TABLE E3TMP");
+            truncateStmt.executeUpdate();
+            
+            // Now load the data - this is a direct replacement for SQL*Loader functionality
+            // We'll use a custom function to read fixed-width data from E3.dat and insert into E3TMP
+            List<E3Record> records = parseE3DataFile(e3DatFile);
+            
+            // Prepare the insert statement
+            String insertSql = "INSERT INTO E3TMP (OUTPUTCD, EXTRACTDT, TIN, FILESOURCECD, TINTYPE, " +
+                              "TXPYRMODLNINM, IIASGMTNUM, ACTIONASGMTNUM, ACTIONDATE, ENTCASECD, " +
+                              "ENTSUBCASECD, MFTCD, TAXPRD, TRANSAMT, RECEIPTNUM, SECUREDIND, " +
+                              "MODDISPCD, ICSGRPIND, CLOSINGCD, TRANSCD, REPORTCD, REPORTDEFINERCD, " +
+                              "MODTYPEIND, EMPIDNUM, INPUTDATE, INPUTTIME, TYPEID, ACTNCD) " +
+                              "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+            
+            ps = conn.prepareStatement(insertSql);
+            
+            // Set auto-commit to false for batch processing
+            conn.setAutoCommit(false);
+            
+            int batchSize = 0;
+            int totalRecords = 0;
+            
+            // Process each record
+            for (E3Record record : records) {
+                ps.setString(1, record.outputcd);
+                ps.setDate(2, new java.sql.Date(record.extractdt.getTime()));
+                ps.setLong(3, record.tin);
+                ps.setInt(4, record.filesourcecd);
+                ps.setInt(5, record.tintype);
+                ps.setString(6, record.txpyrmodlninm);
+                ps.setLong(7, record.iiasgmtnum);
+                ps.setString(8, record.actionasgmtnum);
+                ps.setDate(9, new java.sql.Date(record.actiondate.getTime()));
+                ps.setString(10, record.entcasecd);
+                ps.setString(11, record.entsubcasecd);
+                ps.setString(12, record.mftcd);
+                ps.setDate(13, record.taxprd == null ? null : new java.sql.Date(record.taxprd.getTime()));
+                ps.setInt(14, record.transamt);
+                ps.setString(15, record.receiptnum);
+                ps.setString(16, record.securedind);
+                ps.setInt(17, record.moddispcd);
+                ps.setString(18, record.icsgrpind);
+                ps.setString(19, record.closingcd);
+                ps.setString(20, record.transcd);
+                ps.setString(21, record.reportcd);
+                ps.setString(22, record.reportdefinercd);
+                ps.setString(23, record.modtypeind);
+                ps.setString(24, record.empidnum);
+                ps.setDate(25, record.inputdate == null ? null : new java.sql.Date(record.inputdate.getTime()));
+                ps.setInt(26, record.inputtime);
+                ps.setLong(27, record.typeid);
+                ps.setString(28, record.actncd);
+                
+                ps.addBatch();
+                batchSize++;
+                totalRecords++;
+                
+                // Execute batch at specified size
+                if (batchSize >= 1000) {
+                    ps.executeBatch();
+                    conn.commit();
+                    batchSize = 0;
+                }
+            }
+            
+            // Execute remaining batch
+            if (batchSize > 0) {
+                ps.executeBatch();
+                conn.commit();
+            }
+            
+            // Create E3.bad file (empty) to indicate successful processing
+            new File(e3BadFile).createNewFile();
+            
+            writeToFile(e3OutFile, "Loaded " + totalRecords + " records into E3TMP table\n");
+            
+            return true;
+        } finally {
+            if (ps != null) try { ps.close(); } catch (Exception e) { /* ignore */ }
+            if (truncateStmt != null) try { truncateStmt.close(); } catch (Exception e) { /* ignore */ }
+            if (conn != null) try { conn.close(); } catch (Exception e) { /* ignore */ }
+        }
+    }
+    /**
+     * Class representing an E3 record
+     */
+    private static class E3Record {
+        String outputcd;
+        java.util.Date extractdt;
+        long tin;
+        int filesourcecd;
+        int tintype;
+        String txpyrmodlninm;
+        long iiasgmtnum;
+        String actionasgmtnum;
+        java.util.Date actiondate;
+        String entcasecd;
+        String entsubcasecd;
+        String mftcd;
+        java.util.Date taxprd;
+        int transamt;
+        String receiptnum;
+        String securedind;
+        int moddispcd;
+        String icsgrpind;
+        String closingcd;
+        String transcd;
+        String reportcd;
+        String reportdefinercd;
+        String modtypeind;
+        String empidnum;
+        java.util.Date inputdate;
+        int inputtime;
+        long typeid;
+        String actncd;
+    }
+    
+    /**
+     * Parse the E3 data file according to the loadE3.ctl fixed-width specifications
+     */
+    private List<E3Record> parseE3DataFile(String filePath) throws IOException {
+        List<E3Record> records = new ArrayList<>();
+        
+        try (BufferedReader reader = new BufferedReader(new FileReader(filePath))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (line.length() < 168) {
+                    // Log warning about invalid line length but continue processing
+                    writeToFile(e3OutFile, "WARNING: Invalid line length in E3 data file: " + line.length() + "\n");
+                    continue;
+                }
+                
+                // Create a new record from the fixed-width line
+                E3Record record = new E3Record();
+                
+                // Parse each field from the fixed-width format
+                // This follows the positions defined in loadE3.ctl
+                record.outputcd = line.substring(0, 2).trim();
+                
+                // Extract date fields with special handling for "00000000" values
+                String extractDtStr = line.substring(2, 10).trim();
+                if (extractDtStr.equals("00000000")) {
+                    extractDtStr = "19000101";
+                }
+                record.extractdt = parseDate(extractDtStr, "yyyyMMdd");
+                
+                record.tin = parseLongOrDefault(line.substring(10, 19).trim(), 0);
+                record.filesourcecd = parseIntOrDefault(line.substring(19, 20).trim(), 0);
+                record.tintype = parseIntOrDefault(line.substring(20, 21).trim(), 0);
+                record.txpyrmodlninm = line.substring(21, 56).trim();
+                
+                // If txpyrmodlninm is empty, set it to "NAME UNKNOWN"
+                if (record.txpyrmodlninm == null || record.txpyrmodlninm.isEmpty()) {
+                    record.txpyrmodlninm = "NAME UNKNOWN";
+                }
+                
+                record.iiasgmtnum = parseLongOrDefault(line.substring(56, 64).trim(), 0);
+                record.actionasgmtnum = line.substring(64, 72).trim();
+                
+                String actionDateStr = line.substring(72, 80).trim();
+                if (actionDateStr.equals("00000000")) {
+                    actionDateStr = "19000101";
+                }
+                record.actiondate = parseDate(actionDateStr, "yyyyMMdd");
+                
+                record.entcasecd = line.substring(80, 83).trim();
+                if (record.entcasecd == null || record.entcasecd.isEmpty()) {
+                    record.entcasecd = "000";
+                }
+                
+                record.entsubcasecd = line.substring(83, 86).trim();
+                record.mftcd = line.substring(86, 88).trim();
+                
+                // Parse TAXPRD with special handling as per loadE3.ctl
+                String taxprdStr = line.substring(88, 94).trim();
+                if (taxprdStr.startsWith("0000")) {
+                    taxprdStr = "1900" + taxprdStr.substring(4);
+                }
+                if (taxprdStr.substring(4, 6).equals("00")) {
+                    taxprdStr = taxprdStr.substring(0, 4) + "01" + taxprdStr.substring(6);
+                }
+                record.taxprd = parseDate(taxprdStr, "yyyyMM");
+                
+                record.transamt = parseIntOrDefault(line.substring(94, 110).trim(), 0);
+                if (record.transamt > 0) {
+                    record.transamt = record.transamt / 100; // DECODE(:TRANSAMT, :TRANSAMT, (:TRANSAMT / 100))
+                }
+                
+                record.receiptnum = line.substring(110, 118).trim();
+                
+                record.securedind = line.substring(118, 119).trim();
+                if (record.securedind == null || record.securedind.isEmpty()) {
+                    record.securedind = "";
+                }
+                
+                record.moddispcd = parseIntOrDefault(line.substring(119, 121).trim(), 0);
+                record.icsgrpind = line.substring(121, 122).trim();
+                record.closingcd = line.substring(122, 125).trim();
+                record.transcd = line.substring(125, 128).trim();
+                record.reportcd = line.substring(128, 129).trim();
+                
+                record.reportdefinercd = line.substring(129, 130).trim();
+                if (record.reportdefinercd == null || record.reportdefinercd.isEmpty()) {
+                    record.reportdefinercd = "";
+                }
+                
+                record.modtypeind = line.substring(130, 131).trim();
+                record.empidnum = line.substring(131, 141).trim();
+                
+                String inputDateStr = line.substring(141, 149).trim();
+                if (!inputDateStr.isEmpty()) {
+                    record.inputdate = parseDate(inputDateStr, "yyyyMMdd");
+                }
+                
+                record.inputtime = parseIntOrDefault(line.substring(149, 157).trim(), 0);
+                if (record.inputtime > 0) {
+                    record.inputtime = record.inputtime / 100; // DECODE(:INPUTTIME, :INPUTTIME, (:INPUTTIME / 100))
+                }
+                
+                record.typeid = parseLongOrDefault(line.substring(157, 165).trim(), 0);
+                record.actncd = line.substring(165, 168).trim();
+                
+                records.add(record);
+            }
+        }
+        
+        return records;
+    }
+    
+    /**
+     * Utility method to parse an integer with a default value
+     */
+    private int parseIntOrDefault(String str, int defaultValue) {
+        try {
+            return Integer.parseInt(str);
+        } catch (NumberFormatException e) {
+            return defaultValue;
+        }
+    }
+    
+    /**
+     * Utility method to parse a long with a default value
+     */
+    private long parseLongOrDefault(String str, long defaultValue) {
+        try {
+            return Long.parseLong(str);
+        } catch (NumberFormatException e) {
+            return defaultValue;
+        }
+    }
+    
+    /**
+     * Utility method to parse a date from a string
+     */
+    private java.util.Date parseDate(String dateStr, String format) {
+        try {
+            java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat(format);
+            return sdf.parse(dateStr);
+        } catch (Exception e) {
+            // Return epoch date as default
+            return new java.util.Date(0);
+        }
+    }
+    
+    /**
+     * Check for bad records in the E3.bad file
+     * 
+     * @return number of bad records found
+     */
+    private int checkForBadRecords() throws IOException {
+        File badFile = new File(e3BadFile);
+        if (!badFile.exists() || badFile.length() == 0) {
+            return 0;
+        }
+        
+        // Count lines in the bad file to determine number of bad records
+        int lineCount = 0;
+        try (BufferedReader reader = new BufferedReader(new FileReader(badFile))) {
+            while (reader.readLine() != null) {
+                lineCount++;
+            }
+        }
+        
+        return lineCount;
+    }
+    
+    /**
+     * Execute SQL operations needed for E3 processing
+     */
+    private boolean executeE3SqlOperations() throws SQLException, IOException {
+        Connection conn = null;
+        Statement stmt = null;
+        
+        try {
+            // Connect to database
+            conn = DriverManager.getConnection(jdbcUrl, dbUser, dbPassword);
+            conn.setAutoCommit(false);  // Start transaction
+            stmt = conn.createStatement();
+            
+            try {
+                // Set NLS date format for consistency
+                writeToFile(e3OutFile, "Setting NLS_DATE_FORMAT\n");
+                stmt.execute("ALTER SESSION SET NLS_DATE_FORMAT = 'MM/DD/YYYY HH24:MI:SS'");
+                
+                // First, drop indexes
+                writeToFile(e3OutFile, "Dropping Indexes\n");
+                executeSafely(stmt, "DROP INDEX ENT_GRADE_IX");
+                executeSafely(stmt, "DROP INDEX ENT_CODE_IX");
+                
+                // Update TYPEID and ACTIONDATE in E3TMP Table
+                writeToFile(e3OutFile, "Updating TYPEID and ACTIONDATE in E3TMP Table\n");
+                int updatedRows = stmt.executeUpdate("UPDATE E3TMP SET TYPEID = '0' WHERE TYPEID IS NULL");
+                writeToFile(e3OutFile, "Updated " + updatedRows + " rows setting TYPEID to '0'\n");
+                
+                updatedRows = stmt.executeUpdate("UPDATE E3TMP SET ACTIONDATE = EXTRACTDT WHERE ACTIONDATE = '01/01/1900'");
+                writeToFile(e3OutFile, "Updated " + updatedRows + " rows setting ACTIONDATE\n");
+                
+                // Update ACTSID in E3TMP Table
+                writeToFile(e3OutFile, "Updating ACTSID in E3TMP Table\n");
+                updatedRows = stmt.executeUpdate(
+                    "UPDATE E3TMP SET actsid = (" +
+                    "  SELECT tinsid " +
+                    "  FROM ENT " +
+                    "  WHERE E3TMP.TIN = ENT.TIN and " +
+                    "        E3TMP.TINTYPE = ENT.TINIT and " +
+                    "        E3TMP.FILESOURCECD = ENT.TINFS and " +
+                    "        rownum = 1)"
+                );
+                writeToFile(e3OutFile, "Updated " + updatedRows + " rows setting ACTSID\n");
+                
+                // Update REPORTDEFINERCD in E3TMP Table
+                writeToFile(e3OutFile, "Updating REPORTDEFINERCD in E3TMP Table\n");
+                updatedRows = stmt.executeUpdate("UPDATE E3TMP SET reportdefinercd = ' ' WHERE reportdefinercd = 'S'");
+                writeToFile(e3OutFile, "Updated " + updatedRows + " rows setting REPORTDEFINERCD\n");
+                
+                // Commit changes
+                conn.commit();
+                
+                // Update TAXPRD in E3TMP table
+                writeToFile(e3OutFile, "Updating TAXPRD in E3TMP table 1\n");
+                updatedRows = stmt.executeUpdate(
+                    "UPDATE E3TMP SET TAXPRD = last_day(TAXPRD) " +
+                    "WHERE MFTCD NOT IN ('52','53','60')"
+                );
+                writeToFile(e3OutFile, "Updated " + updatedRows + " rows setting TAXPRD to last_day\n");
+                
+                writeToFile(e3OutFile, "Updating TAXPRD in E3TMP Table 2\n");
+                updatedRows = stmt.executeUpdate(
+                    "UPDATE E3TMP SET TAXPRD = '01/01/1900' " +
+                    "WHERE NVL(TAXPRD,'01/01/1900') <= '01/01/1900'"
+                );
+                writeToFile(e3OutFile, "Updated " + updatedRows + " rows setting TAXPRD to '01/01/1900'\n");
+                
+                // Update ACTSID in E3TMP Table where null
+                writeToFile(e3OutFile, "Updating ACTSID in E3TMP Table\n");
+                updatedRows = stmt.executeUpdate("UPDATE E3TMP SET actsid = 88888888 WHERE actsid is NULL");
+                writeToFile(e3OutFile, "Updated " + updatedRows + " rows setting ACTSID to 88888888\n");
+                
+                // Update MODDISPCD in E3TMP Table
+                writeToFile(e3OutFile, "Updating MODDISPCD in E3TMP Table\n");
+                updatedRows = stmt.executeUpdate(
+                    "UPDATE E3TMP SET MODDISPCD = '00' " +
+                    "WHERE MODDISPCD = '06' and CLOSINGCD = '080'"
+                );
+                writeToFile(e3OutFile, "Updated " + updatedRows + " rows setting MODDISPCD\n");
+                
+                // Commit changes
+                conn.commit();
+                
+                // Update REPORTCD in E3TMP Table
+                writeToFile(e3OutFile, "Updating REPORTCD in E3TMP Table\n");
+                updatedRows = stmt.executeUpdate(
+                    "UPDATE E3TMP SET REPORTCD = 'T' " +
+                    "WHERE MODDISPCD in (6,15,35,36,70,80)"
+                );
+                writeToFile(e3OutFile, "Updated " + updatedRows + " rows setting REPORTCD\n");
+                
+                // Update IIASGMTNUM in E3TMP Table
+                writeToFile(e3OutFile, "Updating IIASGMTNUM in E3TMP Table\n");
+                updatedRows = stmt.executeUpdate(
+                    "UPDATE E3TMP e3a SET iiasgmtnum = (" +
+                    "  SELECT iiasgmtnum FROM E3TMP e3b " +
+                    "  WHERE e3a.actsid = e3b.actsid and " +
+                    "        reportdefinercd = 'H' and " +
+                    "        reportcd = 'T' and " +
+                    "        iiasgmtnum > 0 and " +
+                    "        e3a.actionasgmtnum = e3b.actionasgmtnum) " +
+                    "WHERE iiasgmtnum = 0 and " +
+                    "      reportcd = 'T' and " +
+                    "      closingcd = 99"
+                );
+                writeToFile(e3OutFile, "Updated " + updatedRows + " rows setting IIASGMTNUM\n");
+                
+                // Delete REPORTDEFINERCD from E3TMP
+                writeToFile(e3OutFile, "Deleting REPORTDEFINERCD from E3TMP\n");
+                int deletedRows = stmt.executeUpdate("DELETE FROM E3TMP WHERE reportdefinercd = 'H' and reportcd = 'T'");
+                writeToFile(e3OutFile, "Deleted " + deletedRows + " rows from E3TMP\n");
+                
+                // Commit changes
+                conn.commit();
+                
+                // Drop and recreate HOLDE3TMP table
+                writeToFile(e3OutFile, "Dropping HOLDE3TMP table\n");
+                executeSafely(stmt, "DROP TABLE HOLDE3TMP");
+                
+                writeToFile(e3OutFile, "Creating HOLDE3TMP Table\n");
+                stmt.execute("CREATE TABLE HOLDE3TMP TABLESPACE ENTITY AS (SELECT DISTINCT * FROM E3TMP)");
+                
+                // Truncate and repopulate E3TMP
+                writeToFile(e3OutFile, "Truncating E3TMP Table\n");
+                stmt.execute("TRUNCATE TABLE E3TMP");
+                
+                writeToFile(e3OutFile, "Populating E3TMP Table\n");
+                stmt.execute("INSERT INTO E3TMP (SELECT * FROM HOLDE3TMP)");
+                
+                // Commit changes
+                conn.commit();
+                
+                // Drop and recreate TMPE3TMP table
+                writeToFile(e3OutFile, "Dropping TMPE3TMP table\n");
+                executeSafely(stmt, "DROP TABLE TMPE3TMP");
+                
+                writeToFile(e3OutFile, "Creating TMPE3TMP Table\n");
+                stmt.execute(
+                    "CREATE TABLE TMPE3TMP TABLESPACE ENTITY AS (" +
+                    "  SELECT DISTINCT EXTRACTDT, TIN, FILESOURCECD, TINTYPE " +
+                    "  FROM E3TMP WHERE actsid = 88888888)"
+                );
+                
+                // Add column TXPYRMODLNINM to TMPE3TMP
+                writeToFile(e3OutFile, "Adding column TXPYRMODLNINM to TMPE3TMP\n");
+                stmt.execute("ALTER TABLE TMPE3TMP ADD(TXPYRMODLNINM CHAR(35))");
+                
+                // Update TXPYRMODLNINM in TMPE3TMP
+                writeToFile(e3OutFile, "Updating TXPYRMODLNINM in TMPE3TMP Table\n");
+                updatedRows = stmt.executeUpdate(
+                    "UPDATE TMPE3TMP a SET TXPYRMODLNINM = (" +
+                    "  SELECT txpyrmodlninm " +
+                    "  FROM E3TMP b " +
+                    "  WHERE a.tin = b.tin and " +
+                    "        a.filesourcecd = b.filesourcecd and " +
+                    "        a.tintype = b.tintype and " +
+                    "        rownum = 1)"
+                );
+                writeToFile(e3OutFile, "Updated " + updatedRows + " rows setting TXPYRMODLNINM\n");
+                
+                // Commit changes
+                conn.commit();
+                
+                // Add column GRADE to TMPE3TMP
+                writeToFile(e3OutFile, "Adding column GRADE to TMPE3TMP\n");
+                stmt.execute("ALTER TABLE TMPE3TMP ADD (GRADE NUMBER(2))");
+                
+                // Update GRADE in TMPE3TMP
+                writeToFile(e3OutFile, "Updating GRADE in TMPE3TMP Table\n");
+                updatedRows = stmt.executeUpdate(
+                    "UPDATE TMPE3TMP SET GRADE = (" +
+                    "  SELECT DISTINCT(GRADE) FROM ENTEMP " +
+                    "  WHERE ROID = (SELECT IIASGMTNUM " +
+                    "                FROM E3TMP " +
+                    "                WHERE E3TMP.TIN = TMPE3TMP.TIN AND " +
+                    "                      E3TMP.TINTYPE = TMPE3TMP.TINTYPE AND " +
+                    "                      E3TMP.FILESOURCECD = TMPE3TMP.FILESOURCECD " +
+                    "                AND ROWNUM = 1) AND " +
+                    "        EACTIVE IN ('Y','A') AND " +
+                    "        ROWNUM = 1)"
+                );
+                writeToFile(e3OutFile, "Updated " + updatedRows + " rows setting GRADE\n");
+                
+                // Commit changes
+                conn.commit();
+                
+                // Add column ENTCASECD to TMPE3TMP
+                writeToFile(e3OutFile, "Adding column ENTCASECD to TMPE3TMP\n");
+                stmt.execute("ALTER TABLE TMPE3TMP ADD (ENTCASECD NUMBER(3))");
+                
+                // Update ENTCASECD in TMPE3TMP
+                writeToFile(e3OutFile, "Updating ENTCASECD in TMPE3TMP Table\n");
+                updatedRows = stmt.executeUpdate(
+                    "UPDATE TMPE3TMP SET ENTCASECD = NVL((SELECT ENTCASECD " +
+                    "                                   FROM E3TMP " +
+                    "                                   WHERE E3TMP.TIN = TMPE3TMP.TIN AND " +
+                    "                                         E3TMP.TINTYPE = TMPE3TMP.TINTYPE AND " +
+                    "                                         E3TMP.FILESOURCECD = TMPE3TMP.FILESOURCECD AND " +
+                    "                                         ROWNUM = 1),0)"
+                );
+                writeToFile(e3OutFile, "Updated " + updatedRows + " rows setting ENTCASECD\n");
+                
+                // Commit changes
+                conn.commit();
+                
+                // Update grade values in TMPE3TMP
+                writeToFile(e3OutFile, "Updating GRADE 9,11,13 in TMPE3TMP\n");
+                stmt.executeUpdate("UPDATE TMPE3TMP SET GRADE = 11 WHERE GRADE < 11");
+                stmt.executeUpdate("UPDATE TMPE3TMP SET GRADE = 13 WHERE GRADE > 13");
+                stmt.executeUpdate("UPDATE TMPE3TMP SET GRADE = 11 WHERE GRADE IS NULL");
+                
+                // Commit changes
+                conn.commit();
+                
+                // Populate ENT Table
+                writeToFile(e3OutFile, "Populating ENT Table\n");
+                stmt.execute(
+                    "INSERT INTO ENT(TINSID, EXTRDT, TIN, TINFS, TINIT, TP, TP2, TPCTRL, " +
+                    "               STATE, CASECODE, SUBCODE, GRADE, TOTASSD, ASSNGRP, " +
+                    "               TOTTOUCH, TOTHRS, CASEIND, LFIIND, LDIND, " +
+                    "               PDTIND, RPTIND, SELIND, PVRIND, ASSNCPP, DVICTCD, INSPCIND, " +
+                    "               ERRPDIND, FMSLVIND, IA_REJDT, BODCD, STATUS, " +
+                    "               CLOSEDT, RISK, PREDCD) " +
+                    "VALUES (TINSIDcnt.nextval, EXTRACTDT, TIN, FILESOURCECD, " +
+                    "        TINTYPE, TXPYRMODLNINM, 'BUILT FROM ACTIVITY E3', 'E3', " +
+                    "        '.', ENTCASECD, 000, GRADE, '0', '0', " +
+                    "        '0', '0', 'P', '0', 'F', '0', 'F', '0', " +
+                    "        '0', '01/01/1900', '0', 'F', 'F', 'F', " +
+                    "        '01/01/1900', 'XX', 'P', '01/01/1900', '.', '0' " +
+                    "        FROM TMPE3TMP)");
+                
+                // Commit changes
+                conn.commit();
+                
+                // Update ACTSIDS in E3TMP that were all 8's 
+                writeToFile(e3OutFile, "Updating ACTSID in E3TMP Table\n");
+                updatedRows = stmt.executeUpdate(
+                    "UPDATE E3TMP SET actsid = (" +
+                    "  SELECT tinsid " +
+                    "  FROM ENT " +
+                    "  WHERE E3TMP.TIN = ENT.TIN and " +
+                    "        E3TMP.TINTYPE = ENT.TINIT and " +
+                    "        E3TMP.FILESOURCECD = ENT.TINFS and " +
+                    "        rownum = 1)"
+                );
+                writeToFile(e3OutFile, "Updated " + updatedRows + " rows setting ACTSID\n");
+                
+                // Commit changes
+                conn.commit();
+                
+                // Run stored procedures
+                writeToFile(e3OutFile, "Running procedure E3PROCUNDO\n");
+                CallableStatement callStmt = conn.prepareCall("{call e3procundo}");
+                callStmt.execute();
+                callStmt.close();
+                
+                writeToFile(e3OutFile, "Running procedure E3PROCDO\n");
+                callStmt = conn.prepareCall("{call e3procdo}");
+                callStmt.execute();
+                callStmt.close();
+                
+                // Count before populating ENTACT
+                writeToFile(e3OutFile, "Count Before Populating ENTACT Table\n");
+                ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM ENTACT");
+                if (rs.next()) {
+                    writeToFile(e3OutFile, "Count before: " + rs.getInt(1) + "\n");
+                }
+                rs.close();
+                
+                // Update SECUREDIND in E3TMP
+                writeToFile(e3OutFile, "Updating SECUREDIND in E3TMP TABLE\n");
+                updatedRows = stmt.executeUpdate("UPDATE E3TMP SET SECUREDIND = 'T' WHERE SECUREDIND = 'X'");
+                writeToFile(e3OutFile, "Updated " + updatedRows + " rows setting SECUREDIND to 'T'\n");
+                
+                updatedRows = stmt.executeUpdate("UPDATE E3TMP SET SECUREDIND = 'F' WHERE SECUREDIND <> 'T'");
+                writeToFile(e3OutFile, "Updated " + updatedRows + " rows setting SECUREDIND to 'F'\n");
+                
+                // Populate ENTACT Table
+                writeToFile(e3OutFile, "Populating ENTACT Table\n");
+                stmt.execute(
+                    "INSERT INTO ENTACT(ACTSID, TP, TIN, TINIT, TINFS, " +
+                    "                  ROID, ACTDT, MFT, PERIOD, AMOUNT, " +
+                    "                  FORM869, RTNSEC, DISPCODE, GRPIND, TC, " +
+                    "                  CC, RPTCD, RPTDEF, TYPCD, " +
+                    "                  EXTRDT, CODE, SUBCODE, EMPIDNUM, " +
+                    "                  INPUTDATE, INPUTTIME, AROID, TYPEID, TSACTCD) " +
+                    "SELECT ACTSID, TXPYRMODLNINM, TIN, TINTYPE, FILESOURCECD, " +
+                    "       IIASGMTNUM, ACTIONDATE, MFTCD, TAXPRD, TRANSAMT, " +
+                    "       RECEIPTNUM, SECUREDIND, MODDISPCD, ICSGRPIND, TRANSCD, " +
+                    "       CLOSINGCD, REPORTCD, REPORTDEFINERCD, MODTYPEIND, " +
+                    "       EXTRACTDT, ENTCASECD, ENTSUBCASECD, EMPIDNUM, " +
+                    "       INPUTDATE, INPUTTIME, ACTIONASGMTNUM, TYPEID, ACTNCD " +
+                    "FROM E3TMP " +
+                    "WHERE actsid is not NULL and " +
+                    "      actsid <> 88888888)"
+                );
+                
+                // Commit changes
+                conn.commit();
+                
+                // Count after populating ENTACT
+                writeToFile(e3OutFile, "Count After Populating ENTACT Table\n");
+                rs = stmt.executeQuery("SELECT COUNT(*) FROM ENTACT");
+                if (rs.next()) {
+                    writeToFile(e3OutFile, "Count after: " + rs.getInt(1) + "\n");
+                }
+                rs.close();
+                
+                // Get current date-time
+                rs = stmt.executeQuery("SELECT TO_CHAR(SYSDATE, 'MM/DD/YYYY - HH:MI:SS AM') \"Date-Time\" FROM DUAL");
+                if (rs.next()) {
+                    writeToFile(e3OutFile, "Current date-time: " + rs.getString(1) + "\n");
+                }
+                rs.close();
+                
+                // Create indexes
+                writeToFile(e3OutFile, "Creating Indexes\n");
+                stmt.execute("CREATE BITMAP INDEX ENT_GRADE_IX on ENT (GRADE) tablespace ENTITY_IND");
+                stmt.execute("CREATE BITMAP INDEX ENT_CODE_IX on ENT (CASECODE) tablespace ENTITY_IND");
+                
+                conn.commit();
+                return true;
+            } catch (SQLException e) {
+                // Rollback transaction in case of error
+                try {
+                    conn.rollback();
+                } catch (SQLException re) {
+                    writeToFile(e3OutFile, "ERROR: Failed to rollback transaction: " + re.getMessage() + "\n");
+                }
+                writeToFile(e3OutFile, "ERROR: SQL error: " + e.getMessage() + "\n");
+                e.printStackTrace(new PrintWriter(new FileWriter(e3OutFile, true), true));
+                return false;
+            }
+        } finally {
+            if (stmt != null) try { stmt.close(); } catch (Exception e) { /* ignore */ }
+            if (conn != null) try { conn.close(); } catch (Exception e) { /* ignore */ }
+        } finally {
+            if (stmt != null) try { stmt.close(); } catch (Exception e) { /* ignore */ }
+            if (conn != null) try { conn.close(); } catch (Exception e) { /* ignore */ }
+        }
+    }
+    
+    /**
+     * Execute a SQL statement and ignore any errors
+     * Used primarily for DROP statements where the object might not exist
+     */
+    private void executeSafely(Statement stmt, String sql) {
+        try {
+            stmt.execute(sql);
+        } catch (SQLException e) {
+            // Ignore errors (likely "object does not exist")
+        }
+    }
+    
+    /**
+     * Create a LOGLOAD record for tracking purposes
+     * 
+     * @return true if successful, false otherwise
+     */
+    private boolean createLogloadRecord() throws SQLException, IOException {
+        Connection conn = null;
+        PreparedStatement ps = null;
+        
+        try {
+            // Connect to database
+            conn = DriverManager.getConnection(jdbcUrl, dbUser, dbPassword);
+            
+            String sql = "INSERT INTO LOGLOAD (ENTITY, LOADDATE, LOADTIME, STATUS) VALUES (?, SYSDATE, ?, 'C')";
+            ps = conn.prepareStatement(sql);
+            ps.setString(1, "E3");
+            ps.setString(2, new java.text.SimpleDateFormat("HH:mm:ss").format(new java.util.Date()));
+            
+            int result = ps.executeUpdate();
+            
+            writeToFile(e3OutFile, "LOGLOAD record created: " + result + " row inserted\n");
+            
+            return result > 0;
+        } finally {
+            if (ps != null) try { ps.close(); } catch (Exception e) { /* ignore */ }
+            if (conn != null) try { conn.close(); } catch (Exception e) { /* ignore */ }
+        }
+    }
+    
+    /**
+     * Utility method to write a string to a file
+     * 
+     * @param filePath path to the file
+     * @param content content to write
+     */
+    private void writeToFile(String filePath, String content) throws IOException {
+        try (FileWriter fw = new FileWriter(filePath, true);
+             BufferedWriter bw = new BufferedWriter(fw)) {
+            bw.write(content);
+            bw.flush();
+        }
+    }
+    
+    /**
+     * Get the current date and time in a formatted string
+     * 
+     * @return formatted date and time string
+     */
+    private String getCurrentDateTime() {
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("MM/dd/yyyy HH:mm:ss");
+        return LocalDateTime.now().format(formatter);
+    }
+}
