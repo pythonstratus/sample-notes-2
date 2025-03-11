@@ -1,0 +1,41 @@
+package com.example.batch.model;
+
+import lombok.Data;
+import java.util.Date;
+
+/**
+ * Data model representing all fields from the E5 file.
+ * This class maps to the structure defined in loadE5.ctl.
+ */
+@Data
+public class E5Record {
+    private String outputCd;           // POSITION(1:2) CHAR(2)
+    private String empasgmtnum;        // POSITION(3:10) INTEGER EXTERNAL(8)
+    private String empname;            // POSITION(11:45) CHAR(35)
+    private String empgradecd;         // POSITION(46:47) CHAR(2)
+    private String emptypecd;          // POSITION(48) CHAR(1)
+    private String tourofduty;         // POSITION(49) CHAR(1)
+    private String empworkarea;        // POSITION(50) CHAR(1)
+    private String tpspodind;          // POSITION(51) CHAR(1) with DECODE
+    private String csupodind;          // POSITION(52) CHAR(1) with DECODE
+    private String parapodind;         // POSITION(53) CHAR(1) with DECODE
+    private String mngrpodind;         // POSITION(54) CHAR(1) with DECODE
+    private String empposittypecd;     // POSITION(55) CHAR(1)
+    private String flexplaceind;       // POSITION(56) CHAR(1) with DECODE
+    private Date empupdatedt;          // POSITION(57:64) DATE "YYYYMMDD"
+    private Date entextractdt;         // POSITION(65:72) DATE "YYYYMMDD"
+    private String empidnum;           // POSITION(73:82) CHAR(10)
+    private String emptitle;           // POSITION(83:107) CHAR(25)
+    private Integer areacd;            // POSITION(108:110) INTEGER EXTERNAL(3)
+    private Integer phone;             // POSITION(111:117) INTEGER EXTERNAL(7)
+    private Integer ext;               // POSITION(118:124) INTEGER EXTERNAL(7)
+    private Integer previd;            // POSITION(125:132) INTEGER EXTERNAL(8)
+    private String seid;               // POSITION(133:137) CHAR(5)
+    private String email;              // POSITION(142:186) CHAR(45)
+    private String icsacc;             // POSITION(187) CHAR(1)
+    private String empodcd;            // POSITION(188:190) CHAR(3)
+    private Integer gs9cnt;            // POSITION(191:194) INTEGER EXTERNAL(4)
+    private Integer gs11cnt;           // POSITION(195:198) INTEGER EXTERNAL(4)
+    private Integer gs12cnt;           // POSITION(199:202) INTEGER EXTERNAL(4)
+    private Integer gs13cnt;           // POSITION(203:206) INTEGER EXTERNAL(4)
+}
