@@ -1,0 +1,260 @@
+package com.example.batch.config;
+
+import com.example.batch.tasklet.*;
+import org.springframework.batch.core.Job;
+import org.springframework.batch.core.Step;
+import org.springframework.batch.core.configuration.annotation.EnableBatchProcessing;
+import org.springframework.batch.core.configuration.annotation.JobBuilderFactory;
+import org.springframework.batch.core.configuration.annotation.StepBuilderFactory;
+import org.springframework.batch.core.launch.support.RunIdIncrementer;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.jdbc.core.JdbcTemplate;
+
+import javax.sql.DataSource;
+
+/**
+ * Configuration for the E5 processing workflow.
+ * This class sets up the job that orchestrates the full E5 data processing.
+ */
+@Configuration
+@EnableBatchProcessing
+public class E5ProcessorConfig {
+
+    @Autowired
+    private JobBuilderFactory jobBuilderFactory;
+
+    @Autowired
+    private StepBuilderFactory stepBuilderFactory;
+
+    @Autowired
+    private DataSource dataSource;
+    
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
+    @Value("${file.output.e5}")
+    private String e5OutputPath;
+    
+    @Value("${file.error.e5}")
+    private String e5ErrorPath;
+    
+    @Value("${file.log.e5}")
+    private String e5LogPath;
+    
+    @Value("${als.password.decrypt.command}")
+    private String passwordDecryptCommand;
+    
+    @Value("${als.username}")
+    private String alsUsername;
+
+    /**
+     * Main E5 processing job
+     */
+    @Bean
+    public Job processE5Job() {
+        return jobBuilderFactory.get("processE5Job")
+                .incrementer(new RunIdIncrementer())
+                .start(truncateE5TmpStep())
+                .next(importE5DataStep())
+                .next(validateE5DataStep())
+                .next(deleteNullEmpasgmtnumStep())
+                .next(updateEmpidnumStep())
+                .next(countBeforeDeleteStep())
+                .next(updateEactiveStep())
+                .next(countBeforeMergeStep())
+                .next(mergeToEntemp())
+                .next(countAfterMergeStep())
+                .next(updateUnixStep())
+                .next(updatePostypeStep())
+                .next(updateElevelStep())
+                .next(updatePrimaryRoidStep())
+                .next(runEmpOrgProcedureStep())
+                .next(dropEntemp2Step())
+                .next(createEntemp2Step())
+                .next(logLoadStep())
+                .build();
+    }
+
+    @Bean
+    public Step truncateE5TmpStep() {
+        return stepBuilderFactory.get("truncateE5TmpStep")
+                .tasklet(new SqlRunnerTasklet(jdbcTemplate, "TRUNCATE TABLE E5TMP"))
+                .build();
+    }
+
+    @Bean
+    public Step importE5DataStep() {
+        // This step would run the batch job we defined in E5BatchConfiguration
+        return stepBuilderFactory.get("importE5DataStep")
+                .job(e5BatchConfiguration.importE5Job(e5BatchConfiguration.e5Step()))
+                .build();
+    }
+    
+    @Bean
+    public Step validateE5DataStep() {
+        return stepBuilderFactory.get("validateE5DataStep")
+                .tasklet(new E5ValidationTasklet(jdbcTemplate, e5ErrorPath))
+                .build();
+    }
+    
+    @Bean
+    public Step deleteNullEmpasgmtnumStep() {
+        return stepBuilderFactory.get("deleteNullEmpasgmtnumStep")
+                .tasklet(new SqlRunnerTasklet(jdbcTemplate, "DELETE FROM E5TMP WHERE empasgmtnum is NULL"))
+                .build();
+    }
+    
+    @Bean
+    public Step updateEmpidnumStep() {
+        return stepBuilderFactory.get("updateEmpidnumStep")
+                .tasklet(new SqlRunnerTasklet(jdbcTemplate, 
+                    "UPDATE E5TMP SET empidnum = '99-99999' WHERE empidnum = '-'"))
+                .build();
+    }
+    
+    @Bean
+    public Step countBeforeDeleteStep() {
+        return stepBuilderFactory.get("countBeforeDeleteStep")
+                .tasklet(new SqlRunnerTasklet(jdbcTemplate, "SELECT COUNT(*) FROM E5TMP", true))
+                .build();
+    }
+    
+    @Bean
+    public Step updateEactiveStep() {
+        return stepBuilderFactory.get("updateEactiveStep")
+                .tasklet(new SqlRunnerTasklet(jdbcTemplate, 
+                    "UPDATE ENTEMP SET EACTIVE = 'N' WHERE ROID NOT LIKE '85%'"))
+                .build();
+    }
+    
+    @Bean
+    public Step countBeforeMergeStep() {
+        return stepBuilderFactory.get("countBeforeMergeStep")
+                .tasklet(new SqlRunnerTasklet(jdbcTemplate, "SELECT COUNT(*) FROM ENTEMP", true))
+                .build();
+    }
+    
+    @Bean
+    public Step mergeToEntemp() {
+        return stepBuilderFactory.get("mergeToEntemp")
+                .tasklet(new SqlRunnerTasklet(jdbcTemplate, getMergeSql()))
+                .build();
+    }
+    
+    private String getMergeSql() {
+        return "MERGE INTO ENTEMP a " +
+               "USING (SELECT * FROM ALS.E5TMP WHERE EMPASGMTNUM not like '85%') b " +
+               "ON (a.ROID = b.EMPASGMTNUM and nvl(a.SEID,'00000')=nvl(b.SEID, '00000')) " +
+               "WHEN MATCHED THEN " +
+               "  UPDATE SET a.NAME=b.EMPNAME, a.GRADE=b.EMPGRADECD, a.TYPE=b.EMPTYPECD, " +
+               "  a.BADGE=b.EMPIDNUM, a.TITLE=b.EMPTITLE, a.AREACD=b.AREACD, " +
+               "  a.PHONE=b.PHONE, a.EXT=b.EXT, a.EMAIL=b.EMAIL, " +
+               "  a.POSTYPE=b.EMPPOSITTYPECD, a.AREA=b.EMPWORKAREA, " +
+               "  a.TOUR=b.TOUROFDUTY, a.PODIND=b.MNGRPODIND, " +
+               "  a.TPSIND=b.TPSPODIND, a.CSUIND=b.CSUPODIND, " +
+               "  a.AIDEIND=b.PARAPODIND, a.FLEXIND=b.FLEXPLACEIND, " +
+               "  a.EMPDT=b.EMPUPDATEDT, a.PREVID=b.PREVID, a.ICSACC=b.ICSACC, " +
+               "  a.EACTIVE='Y', a.EXTRDT=b.ENTEXTRACTDT, " +
+               "  a.PODCD=b.EMPODCD, a.GS9CNT=b.GS9CNT, a.GS11CNT=b.GS11CNT, " +
+               "  a.GS12CNT=b.GS12CNT, a.GS13CNT=b.GS13CNT " +
+               "WHEN NOT MATCHED THEN " +
+               "  INSERT (ROID, NAME, GRADE, TYPE, " +
+               "          BADGE, TITLE, AREACD, PHONE, EXT, SEID, " +
+               "          EMAIL, POSTYPE, AREA, TOUR, " +
+               "          PODIND, TPSIND, CSUIND, AIDEIND, " +
+               "          FLEXIND, EMPDT, PREVID, ICSACC, " +
+               "          EACTIVE, EXTRDT, PODCD, " +
+               "          GS9CNT, GS11CNT, GS12CNT, GS13CNT) " +
+               "  VALUES (b.EMPASGMTNUM, b.EMPNAME, b.EMPGRADECD, b.EMPTYPECD, " +
+               "          b.EMPIDNUM, b.EMPTITLE, b.AREACD, b.PHONE, b.EXT, b.SEID, " +
+               "          b.EMAIL, b.EMPPOSITTYPECD, b.EMPWORKAREA, b.TOUROFDUTY, " +
+               "          b.MNGRPODIND, b.TPSPODIND, b.CSUPODIND, b.PARAPODIND, " +
+               "          b.FLEXPLACEIND, b.EMPUPDATEDT, b.PREVID, b.ICSACC, " +
+               "          'Y', b.ENTEXTRACTDT, b.EMPODCD, " +
+               "          b.GS9CNT, b.GS11CNT, b.GS12CNT, b.GS13CNT)";
+    }
+    
+    @Bean
+    public Step countAfterMergeStep() {
+        return stepBuilderFactory.get("countAfterMergeStep")
+                .tasklet(new SqlRunnerTasklet(jdbcTemplate, "SELECT COUNT(*) FROM ENTEMP", true))
+                .build();
+    }
+    
+    @Bean
+    public Step updateUnixStep() {
+        String updateUnixSql = 
+            "UPDATE ENTEMP a " +
+            "SET a.unix = (SELECT b.unix " +
+            "              FROM ENTEMP b " +
+            "              WHERE a.seid = b.seid and " +
+            "                    b.unix is not NULL and rownum = 1) " +
+            "WHERE a.eactive in ('Y','A') and " +
+            "      a.seid not in ('99999', '00000', '44444') and " +
+            "      a.seid is not NULL and " +
+            "      a.unix is NULL";
+            
+        return stepBuilderFactory.get("updateUnixStep")
+                .tasklet(new SqlRunnerTasklet(jdbcTemplate, updateUnixSql))
+                .build();
+    }
+    
+    @Bean
+    public Step updatePostypeStep() {
+        return stepBuilderFactory.get("updatePostypeStep")
+                .tasklet(new SqlRunnerTasklet(jdbcTemplate, 
+                    "UPDATE ENTEMP SET postype = 'B', elevel = -2 WHERE eactive = 'N' AND postype NOT IN ('B','V')"))
+                .build();
+    }
+    
+    @Bean
+    public Step updateElevelStep() {
+        return stepBuilderFactory.get("updateElevelStep")
+                .tasklet(new SqlRunnerTasklet(jdbcTemplate, 
+                    "UPDATE ENTEMP SET elevel = setelevel(icsacc,title,postype) WHERE ROID not like '85%'"))
+                .build();
+    }
+    
+    @Bean
+    public Step updatePrimaryRoidStep() {
+        return stepBuilderFactory.get("updatePrimaryRoidStep")
+                .tasklet(new SqlRunnerTasklet(jdbcTemplate, 
+                    "UPDATE ENTEMP SET PRIMARY_ROID = 'N' WHERE PRIMARY_ROID is NULL"))
+                .build();
+    }
+    
+    @Bean
+    public Step runEmpOrgProcedureStep() {
+        return stepBuilderFactory.get("runEmpOrgProcedureStep")
+                .tasklet(new SqlRunnerTasklet(jdbcTemplate, "BEGIN emp_org; END;"))
+                .build();
+    }
+    
+    @Bean
+    public Step dropEntemp2Step() {
+        return stepBuilderFactory.get("dropEntemp2Step")
+                .tasklet(new SqlRunnerTasklet(jdbcTemplate, "DROP TABLE ENTEMP2", false))
+                .build();
+    }
+    
+    @Bean
+    public Step createEntemp2Step() {
+        return stepBuilderFactory.get("createEntemp2Step")
+                .tasklet(new SqlRunnerTasklet(jdbcTemplate, 
+                    "CREATE TABLE ENTEMP2 TABLESPACE ENTITY AS (SELECT * FROM ENTEMP)"))
+                .build();
+    }
+    
+    @Bean
+    public Step logLoadStep() {
+        return stepBuilderFactory.get("logLoadStep")
+                .tasklet(new LogLoadTasklet(jdbcTemplate, "E5"))
+                .build();
+    }
+    
+    @Autowired
+    private E5BatchConfiguration e5BatchConfiguration;
+}
