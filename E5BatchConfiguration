@@ -1,0 +1,170 @@
+package com.example.batch.config;
+
+import com.example.batch.model.E5Record;
+import com.example.batch.processor.E5ItemProcessor;
+import org.springframework.batch.core.Job;
+import org.springframework.batch.core.Step;
+import org.springframework.batch.core.configuration.annotation.EnableBatchProcessing;
+import org.springframework.batch.core.configuration.annotation.JobBuilderFactory;
+import org.springframework.batch.core.configuration.annotation.StepBuilderFactory;
+import org.springframework.batch.core.launch.support.RunIdIncrementer;
+import org.springframework.batch.item.ItemProcessor;
+import org.springframework.batch.item.database.BeanPropertyItemSqlParameterSourceProvider;
+import org.springframework.batch.item.database.JdbcBatchItemWriter;
+import org.springframework.batch.item.file.FlatFileItemReader;
+import org.springframework.batch.item.file.mapping.BeanWrapperFieldSetMapper;
+import org.springframework.batch.item.file.mapping.DefaultLineMapper;
+import org.springframework.batch.item.file.transform.FixedLengthTokenizer;
+import org.springframework.batch.item.file.transform.Range;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.jdbc.core.JdbcTemplate;
+
+import javax.sql.DataSource;
+import java.text.SimpleDateFormat;
+
+/**
+ * Spring Batch configuration for processing E5 data files.
+ * This class sets up the job to read from E5 files and write to the database.
+ */
+@Configuration
+@EnableBatchProcessing
+public class E5BatchConfiguration {
+
+    @Autowired
+    public JobBuilderFactory jobBuilderFactory;
+
+    @Autowired
+    public StepBuilderFactory stepBuilderFactory;
+
+    @Autowired
+    public DataSource dataSource;
+
+    @Value("${file.input.e5}")
+    private String fileInputPath;
+
+    @Bean
+    public FlatFileItemReader<E5Record> e5Reader() {
+        FlatFileItemReader<E5Record> reader = new FlatFileItemReader<>();
+        reader.setResource(new FileSystemResource(fileInputPath));
+        reader.setLinesToSkip(0); // No header line to skip
+        
+        // Configure line mapper
+        DefaultLineMapper<E5Record> lineMapper = new DefaultLineMapper<>();
+        
+        // Configure tokenizer for fixed-length file
+        FixedLengthTokenizer tokenizer = new FixedLengthTokenizer();
+        tokenizer.setNames("outputCd", "empasgmtnum", "empname", "empgradecd", "emptypecd", 
+                          "tourofduty", "empworkarea", "tpspodind", "csupodind", "parapodind",
+                          "mngrpodind", "empposittypecd", "flexplaceind", "empupdatedt", "entextractdt",
+                          "empidnum", "emptitle", "areacd", "phone", "ext", 
+                          "previd", "seid", "email", "icsacc", "empodcd",
+                          "gs9cnt", "gs11cnt", "gs12cnt", "gs13cnt");
+        
+        tokenizer.setColumns(
+            new Range(1, 2),    // outputCd
+            new Range(3, 10),   // empasgmtnum
+            new Range(11, 45),  // empname
+            new Range(46, 47),  // empgradecd
+            new Range(48, 48),  // emptypecd
+            new Range(49, 49),  // tourofduty
+            new Range(50, 50),  // empworkarea
+            new Range(51, 51),  // tpspodind
+            new Range(52, 52),  // csupodind
+            new Range(53, 53),  // parapodind
+            new Range(54, 54),  // mngrpodind
+            new Range(55, 55),  // empposittypecd
+            new Range(56, 56),  // flexplaceind
+            new Range(57, 64),  // empupdatedt
+            new Range(65, 72),  // entextractdt
+            new Range(73, 82),  // empidnum
+            new Range(83, 107), // emptitle
+            new Range(108, 110), // areacd
+            new Range(111, 117), // phone
+            new Range(118, 124), // ext
+            new Range(125, 132), // previd
+            new Range(133, 137), // seid
+            new Range(142, 186), // email
+            new Range(187, 187), // icsacc
+            new Range(188, 190), // empodcd
+            new Range(191, 194), // gs9cnt
+            new Range(195, 198), // gs11cnt
+            new Range(199, 202), // gs12cnt
+            new Range(203, 206)  // gs13cnt
+        );
+        
+        lineMapper.setLineTokenizer(tokenizer);
+        
+        // Configure field set mapper
+        BeanWrapperFieldSetMapper<E5Record> fieldSetMapper = new BeanWrapperFieldSetMapper<>();
+        fieldSetMapper.setTargetType(E5Record.class);
+        
+        // Configure custom date format for date fields
+        SimpleDateFormat dateFormat = new SimpleDateFormat("yyyyMMdd");
+        fieldSetMapper.setCustomEditors(java.util.Collections.singletonMap(
+            java.util.Date.class, 
+            new org.springframework.beans.propertyeditors.CustomDateEditor(
+                dateFormat, true)));
+                
+        lineMapper.setFieldSetMapper(fieldSetMapper);
+        reader.setLineMapper(lineMapper);
+        
+        return reader;
+    }
+
+    @Bean
+    public ItemProcessor<E5Record, E5Record> e5Processor() {
+        return new E5ItemProcessor();
+    }
+
+    @Bean
+    public JdbcBatchItemWriter<E5Record> e5Writer() {
+        JdbcBatchItemWriter<E5Record> writer = new JdbcBatchItemWriter<>();
+        writer.setItemSqlParameterSourceProvider(new BeanPropertyItemSqlParameterSourceProvider<>());
+        
+        // Insert statement for the E5TMP table
+        writer.setSql("INSERT INTO E5TMP " +
+                "(OUTPUTCD, EMPASGMTNUM, EMPNAME, EMPGRADECD, EMPTYPECD, " +
+                "TOUROFDUTY, EMPWORKAREA, TPSPODIND, CSUPODIND, PARAPODIND, " +
+                "MNGRPODIND, EMPPOSITTYPECD, FLEXPLACEIND, EMPUPDATEDT, ENTEXTRACTDT, " +
+                "EMPIDNUM, EMPTITLE, AREACD, PHONE, EXT, " +
+                "PREVID, SEID, EMAIL, ICSACC, EMPODCD, " +
+                "GS9CNT, GS11CNT, GS12CNT, GS13CNT) " +
+                "VALUES (:outputCd, :empasgmtnum, :empname, :empgradecd, :emptypecd, " +
+                ":tourofduty, :empworkarea, :tpspodind, :csupodind, :parapodind, " +
+                ":mngrpodind, :empposittypecd, :flexplaceind, :empupdatedt, :entextractdt, " +
+                ":empidnum, :emptitle, :areacd, :phone, :ext, " +
+                ":previd, :seid, :email, :icsacc, :empodcd, " +
+                ":gs9cnt, :gs11cnt, :gs12cnt, :gs13cnt)");
+                
+        writer.setDataSource(dataSource);
+        return writer;
+    }
+
+    @Bean
+    public Job importE5Job(Step e5Step) {
+        return jobBuilderFactory.get("importE5Job")
+                .incrementer(new RunIdIncrementer())
+                .flow(e5Step)
+                .end()
+                .build();
+    }
+
+    @Bean
+    public Step e5Step() {
+        return stepBuilderFactory.get("e5Step")
+                .<E5Record, E5Record>chunk(10)
+                .reader(e5Reader())
+                .processor(e5Processor())
+                .writer(e5Writer())
+                .build();
+    }
+
+    @Bean
+    public JdbcTemplate jdbcTemplate() {
+        return new JdbcTemplate(dataSource);
+    }
+}
