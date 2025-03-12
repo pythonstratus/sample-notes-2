@@ -1,0 +1,429 @@
+# DIAL Modernization Project
+
+## Overview
+
+The DIAL (Data Integration and Analysis for Lien) Modernization Project aims to transform the existing legacy system into a maintainable, scalable Java application using Spring Boot and Spring Batch frameworks. This project preserves all existing functionality while improving code quality, performance, and maintainability.
+
+## Table of Contents
+
+1. [Project Description](#project-description)
+2. [Technology Stack](#technology-stack)
+3. [System Architecture](#system-architecture)
+4. [Implementation Stages](#implementation-stages)
+5. [Development Setup](#development-setup)
+6. [Configuration](#configuration)
+7. [Running the Application](#running-the-application)
+8. [Monitoring](#monitoring)
+9. [Deployment](#deployment)
+10. [Contributing](#contributing)
+
+## Project Description
+
+DIAL is a critical system that processes tax-related information, identifies entities, consolidates data, and performs risk assessment. The system handles multiple data sources, performs complex calculations, and populates several database tables with processed information.
+
+Key functions include:
+- Processing taxpayer information across multiple areas (MRI and SB/SE)
+- Linking TDI and TDA data for taxpayers
+- Creating entities based on specific business rules
+- Calculating priority scores for cases that may require further investigation
+- Assigning cases to appropriate Revenue Officers
+
+## Technology Stack
+
+- **Java 17**
+- **Spring Boot 3.2.x**
+- **Spring Batch 5.x**
+- **Spring Data JPA**
+- **Oracle Database**
+- **Maven**
+- **Lombok**
+- **Logback**
+
+## System Architecture
+
+The application follows a modular architecture with domain-driven design principles:
+
+```
+dial-application
+├── core
+│   ├── domain            # Core domain models
+│   │   ├── entity        # Entity-related domain models
+│   │   ├── risk          # Risk assessment domain models
+│   │   └── processing    # Processing-related domain models
+│   ├── repositories      # Data access interfaces
+│   └── util              # Utility classes
+├── batch
+│   ├── config            # Spring Batch job configurations
+│   │   ├── acquisition   # Data acquisition job config
+│   │   ├── processing    # Data processing job config
+│   │   ├── risk          # Risk assessment job config
+│   │   └── distribution  # File distribution job config
+│   ├── listeners         # Batch job listeners
+│   ├── readers           # Custom item readers
+│   ├── processors        # Custom item processors
+│   └── writers           # Custom item writers
+├── services
+│   ├── acquisition       # Data acquisition services
+│   │   ├── file          # File handling services
+│   │   └── database      # Database copying services
+│   ├── processing        # Data processing services
+│   │   ├── consolidation # Data consolidation services
+│   │   └── loading       # Database loading services
+│   ├── risk              # Risk assessment services
+│   │   ├── calculation   # Risk calculation services
+│   │   └── prioritization# Priority calculation services
+│   └── distribution      # File distribution services
+│       ├── parser        # File parsing services
+│       └── transmission  # File transmission services
+├── integration
+│   ├── legacy            # Legacy script integration
+│   └── external          # External system integration
+└── api
+    ├── controllers       # REST API controllers
+    ├── dto               # Data transfer objects
+    └── exceptions        # API exception handling
+```
+
+## Implementation Stages
+
+The project is implemented in ten distinct stages, each corresponding to the original DIAL process steps:
+
+### Stage 1: Data Acquisition and Preparation
+
+**Description**: Handle initial data acquisition and prepare data for processing.
+
+**Key Components**:
+- Copy DIAL tables and redirect users
+- Create COMBO.raw files by processing TDI/TDA data
+- Validate input files
+
+**Core Classes**:
+- `DataAcquisitionJob`: Main Spring Batch job for Stage 1
+- `TableCopyService`: Handles database table copying operations
+- `DatabasePointerManager`: Manages database synonym redirections
+- `ComboFileGenerator`: Creates and validates COMBO.raw files
+- `FileValidationService`: Validates input file formats and content
+
+**SQL Scripts Integration**:
+- `dothcp.sql`: Table copying
+- `Dial1_pointcp.sql`: Database pointer updates
+- `crRAW.csh`: COMBO.raw file creation
+
+### Stage 2: Initial Data Processing
+
+**Description**: Process initial data and prepare for consolidation.
+
+**Key Components**:
+- Check and back up CFF and QUEUE files
+- Drop database constraints for loading
+- Run data parsing and COREDIAL updates
+- Verify processing through audit checks
+
+**Core Classes**:
+- `InitialDataProcessingJob`: Main Spring Batch job for Stage 2
+- `FileBackupService`: Handles CFF and QUEUE file backups
+- `DatabaseConstraintManager`: Manages dropping/rebuilding of constraints
+- `CoreDialUpdateProcessor`: Processes data updates for COREDIAL
+- `ProcessingAuditService`: Verifies processing completion through audits
+- `EntityControlUpdater`: Updates entity control information
+
+**SQL Scripts Integration**:
+- `crdata1.csh`, `crdata2.csh`: File backup and constraint management
+- `proc_updt_ent_control.sql`: Entity control updates
+- `Update_Ent_ARISK.sql`, `Update_Ent_modelrank.sql`: Risk and ranking updates
+- `Update_TinSumm_And_TinSumm2_ARISK.sql`: Summary table updates
+
+### Stage 3: Data Consolidation
+
+**Description**: Consolidate data files for further processing.
+
+**Key Components**:
+- Consolidate data to common load area
+- Handle duplicate detection
+- Verify output files
+
+**Core Classes**:
+- `DataConsolidationJob`: Main Spring Batch job for Stage 3
+- `FileConsolidationService`: Consolidates data files to common load area
+- `DuplicateEntityDetector`: Identifies and handles duplicate ENTSIDS
+- `OutputFileVerifier`: Validates the generated output files
+- `EntityViewManager`: Implements functionality of entity view SQL
+
+**SQL Scripts Integration**:
+- `consol.csh`: Data consolidation
+- `view_ENTITY_ID2.sql`: Entity view
+- `field_risk.sql`: Risk assessment
+
+### Stage 4: Database Loading
+
+**Description**: Load processed data into database tables.
+
+**Key Components**:
+- Load DIALENT, DIALMOD, DIALSUM, and MODELS tables
+- Implement optimized batch loading
+- Handle error recovery
+
+**Core Classes**:
+- `DatabaseLoadingJob`: Main Spring Batch job for Stage 4
+- `EntityTableLoader`: Handles loading of DIALENT table
+- `ModuleTableLoader`: Handles loading of DIALMOD table
+- `SummaryTableLoader`: Handles loading of DIALSUM table
+- `ModelScoreLoader`: Handles loading of MODELS table
+- `BatchLoadingOptimizer`: Optimizes batch loading performance
+- `LoadErrorRecoveryManager`: Manages recovery from loading errors
+- `InitialRiskCalculator`: Performs initial risk calculations during loading
+
+**SQL Scripts Integration**:
+- `load_ent.sql`, `load_mod.sql`, `load_sum.sql`, `load_sco.sql`: Loading scripts
+- `acs_risk.sql`, `alrisk.sql`: Risk calculation
+- `acs_risk_new.sql`: Updated risk logic
+
+### Stage 5: Database Optimization
+
+**Description**: Optimize database for performance.
+
+**Key Components**:
+- Rebuild indexes and constraints
+- Analyze tables and indexes
+- Purge unnecessary records
+
+**Core Classes**:
+- `DatabaseOptimizationJob`: Main Spring Batch job for Stage 5
+- `IndexRebuildService`: Handles rebuilding of database indexes
+- `ConstraintRestoreService`: Restores previously dropped constraints
+- `DatabaseStatisticsAnalyzer`: Analyzes tables and indexes for performance
+- `CoreDialPurgeService`: Purges unnecessary records from COREDIAL
+- `ModelUpdateService`: Handles updates to model data
+
+**SQL Scripts Integration**:
+- `indexes.sql`: Index rebuilding
+- `analyze.sql`: Database analysis
+- `purge.sql`: Data purging
+- `NEWMODL.sql`, `NEWWEEK.sql`: Model updates
+
+### Stage 6: Risk Assessment
+
+**Description**: Perform risk assessment on processed data.
+
+**Key Components**:
+- Implement risk assessment algorithm
+- Apply model scores
+- Calculate priority rankings
+
+**Core Classes**:
+- `RiskAssessmentJob`: Main Spring Batch job for Stage 6
+- `RiskCalculationService`: Implements the risk assessment algorithm
+- `ModelScoreProcessor`: Applies model scores to entities
+- `PriorityRankingService`: Calculates priority rankings for cases
+- `NtileBucketingService`: Implements NTILE statistical bucketing
+- `StateMapperService`: Handles state mapping for risk calculations
+- `ZipCodeProcessor`: Processes ZIP code information
+
+**SQL Scripts Integration**:
+- `risk.sql`, `risk_new.sql`: Risk calculations
+- `q_state_map.sql`: State mapping
+- `q_wo_zip.sql`, `q_wo_zip_drivers.sql`: ZIP processing
+
+### Stage 7: Entity File Distribution
+
+**Description**: Distribute entity files to appropriate servers.
+
+**Key Components**:
+- Parse entity files for MIS Area servers
+- Archive, zip, and transmit files
+- Verify file splitting
+
+**Core Classes**:
+- `EntityDistributionJob`: Main Spring Batch job for Stage 7
+- `AreaFileParserService`: Parses entity files for MIS Area servers
+- `FileTransmissionService`: Handles file transmission to remote servers
+- `ArchiveService`: Archives and zips files for transmission
+- `FileSplitVerificationService`: Verifies proper file splitting
+- `GroupFileParserService`: Parses entity files for RO groups
+- `RiskCalculationIntegrator`: Integrates risk calculations during file distribution
+
+**SQL Scripts Integration**:
+- `rawcopy.sql`: Raw data copying
+- `risk.csh`, `runrisk.csh`: Risk calculations
+- `runall.csh`, `runArisk.csh`: Area processing
+- `grp.csh`, `ftp_grp.csh`: File distribution
+
+### Stage 8: Statistics and Auditing
+
+**Description**: Compile statistics and audit information.
+
+**Key Components**:
+- Compile DIAL statistics
+- Load audit information
+- Generate reports
+
+**Core Classes**:
+- `StatisticsAndAuditJob`: Main Spring Batch job for Stage 8
+- `DialStatisticsCompiler`: Compiles statistics about DIAL processing
+- `AuditInformationLoader`: Loads audit information into DIALAUD table
+- `ReportGenerationService`: Generates processing reports
+- `ProcessingSummaryService`: Creates summary of processing results
+- `SecurityProcessingService`: Handles security-related processing tasks
+
+**SQL Scripts Integration**:
+- `loadcnt.sql`: Count statistics
+- `sum3.csh`: Summary calculations
+- `IDSgetcpwd.sql`, `IDSupwd.sql`: Security processing
+
+### Stage 9: Database Finalization
+
+**Description**: Finalize database updates.
+
+**Key Components**:
+- Update database synonyms
+- Complete finalization procedures
+- Update risk values
+
+**Core Classes**:
+- `DatabaseFinalizationJob`: Main Spring Batch job for Stage 9
+- `SynonymUpdateService`: Updates database synonyms to point to new tables
+- `FinalizationProcedureExecutor`: Completes database finalization procedures
+- `ARiskUpdateService`: Updates ARisk values in TINSUMMARY table
+- `DatabaseCopyService`: Creates necessary database copies
+- `DatabaseLockManager`: Handles locking/unlocking of database objects
+
+**SQL Scripts Integration**:
+- `pt2real.sql`, `syn2cp.sql`, `syn2real.sql`: Pointer updates
+- `complete.sql`, `entries.sql`: Finalization
+- `dialcopy.sql`, `dialcopy2.sql`: Database copies
+
+### Stage 10: Cleanup and Completion
+
+**Description**: Perform final cleanup and completion tasks.
+
+**Key Components**:
+- Remove temporary files
+- Perform final validation
+- Generate completion notifications
+
+**Core Classes**:
+- `CleanupAndCompletionJob`: Main Spring Batch job for Stage 10
+- `TemporaryFileCleanupService`: Removes temporary files after processing
+- `FinalValidationService`: Performs final validation checks
+- `CompletionNotificationService`: Generates completion notifications
+- `DirectoryPreparationService`: Creates directories for next run
+- `TableStructureManager`: Handles any required table structure alterations
+- `ProcessCompletionAuditor`: Records completion in audit log
+
+**SQL Scripts Integration**:
+- `rmRAW.csh`: File removal
+- `mkDIALDIRS.sql`: Directory creation
+- `alter_dialent.csh`: Table structure alterations
+
+## Development Setup
+
+### Prerequisites
+
+- JDK 17+
+- Maven 3.8+
+- Oracle Database
+- Git
+
+### Clone the Repository
+
+```bash
+git clone https://github.com/your-organization/dial-modernization.git
+cd dial-modernization
+```
+
+### Build the Project
+
+```bash
+mvn clean install
+```
+
+## Configuration
+
+The application is configured using Spring Boot's application properties mechanism:
+
+```yaml
+# Application Configuration
+dial:
+  file:
+    input-directory: /path/to/input/files
+    processed-directory: /path/to/processed/files
+    error-directory: /path/to/error/files
+  
+  batch:
+    chunk-size: 100
+    max-threads: 4
+    
+  database:
+    schema: dial
+    
+  integration:
+    legacy-scripts-enabled: true
+    legacy-scripts-directory: /path/to/legacy/scripts
+```
+
+## Running the Application
+
+### Run the Complete Pipeline
+
+```bash
+java -jar dial-application.jar
+```
+
+### Run Specific Stages
+
+```bash
+java -jar dial-application.jar --dial.stage=STAGE_1,STAGE_2
+```
+
+### Run with Custom Configuration
+
+```bash
+java -jar dial-application.jar --spring.config.location=file:/path/to/custom/application.yml
+```
+
+## Monitoring
+
+The application provides monitoring capabilities through Spring Boot Actuator:
+
+- Health check: `/actuator/health`
+- Metrics: `/actuator/metrics`
+- Batch job information: `/actuator/batch`
+
+Additionally, a custom dashboard is available at `/dashboard` for real-time processing status and statistics.
+
+## Deployment
+
+### Production Deployment
+
+1. Build the production JAR:
+   ```bash
+   mvn clean package -P production
+   ```
+
+2. Deploy the JAR to the server
+3. Configure the application with production settings
+4. Start the application with appropriate memory settings:
+   ```bash
+   java -Xms2g -Xmx4g -jar dial-application.jar --spring.profiles.active=production
+   ```
+
+### Running as a Service
+
+For Linux/Unix systems, a systemd service file is provided in the `deployment` directory.
+
+## Contributing
+
+### Branching Strategy
+
+- `main`: Production-ready code
+- `develop`: Development branch for the next release
+- `feature/*`: Feature branches
+- `bugfix/*`: Bug fix branches
+
+### Pull Request Process
+
+1. Create a feature or bugfix branch
+2. Implement changes and add tests
+3. Submit a pull request to the develop branch
+4. Ensure CI/CD pipeline passes
+5. Request a code review
