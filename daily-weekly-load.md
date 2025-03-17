@@ -1,15 +1,55 @@
 # Entity Service Deployment Guide for OpenShift
 
-This guide outlines the steps to deploy the Entity Service (for Daily and Weekly E file loading to Oracle Database) to an OpenShift container, including Splunk and SMTP integration.
+This guide outlines the steps to deploy the Entity Service (for Daily and Weekly E file loading to Oracle Database) to an OpenShift container, including Splunk and SMTP integration. This guide incorporates the decisions and considerations from the March 17, 2025 planning meeting.
+
+## Current Status
+- Coding and testing are complete on entity services as the base project
+- Dev pipeline is active (since mid-last week)
+- Entity ConfigMap already exists in OpenShift
+- Data source resources for ALS need to be created
 
 ## Table of Contents
+- [Current Status](#current-status)
+- [Architecture Overview](#architecture-overview)
+- [Deployment Options](#deployment-options)
 - [Pre-Deployment Preparation](#pre-deployment-preparation)
 - [Deployment Steps](#deployment-steps)
 - [Splunk Integration](#splunk-integration)
 - [SMTP Configuration](#smtp-configuration)
 - [Load Job Scheduling](#load-job-scheduling)
+- [Resource Considerations](#resource-considerations)
 - [Monitoring and Maintenance](#monitoring-and-maintenance)
 - [Verification and Testing](#verification-and-testing)
+- [CI/CD Configuration](#cicd-configuration)
+- [Security Considerations](#security-considerations)
+- [Responsibilities Matrix](#responsibilities-matrix)
+
+## Architecture Overview
+
+The Entity Service is a Spring Boot application that processes E files and loads them into an Oracle Database on a scheduled basis (daily and weekly). The application will be deployed to OpenShift and requires the following integrations:
+
+- Oracle Database connectivity for data loading
+- Splunk for centralized logging
+- SMTP for email notifications
+- Spring Batch for job processing
+- File watcher for file pickup
+
+## Deployment Options
+
+Two options have been considered for running the jobs:
+
+1. **Option 1: Integrated with Entity Service**
+   - Deploy as part of the existing Entity Service application
+   - Leverage existing infrastructure and CI/CD pipeline
+   - Easier to maintain as a single application
+
+2. **Option 2: Standalone Job**
+   - Run as a separate bootable job in OpenShift
+   - No hostname, routing, or HTTPS configuration needed
+   - Uses OpenShift's native job functionality
+   - Requires coordination with CI/CD to create another Spring Boot application
+
+**Decision**: Initial implementation will be integrated with the Entity Service (Option 1) for testing. Resources will be increased to handle the processing load. The standalone job approach can be considered after performance testing.
 
 ## Pre-Deployment Preparation
 
@@ -241,6 +281,8 @@ oc create route edge entity-service --service=entity-service --port=8080
 
 ## Splunk Integration
 
+> **Note**: Splunk is already set up for Phase 1. For Phase 2, access is granted via a portal provided by Jordan. Create a ticket for Splunk integration and work with Joyce (Splunk admin) for configuration.
+
 ### 1. Create Splunk Connection Secrets
 
 ```bash
@@ -258,10 +300,12 @@ oc create configmap splunk-config \
   --from-file=config/splunk-logging.properties
 ```
 
-### 3. Configure Splunk Forwarder Sidecar (Optional for direct integration)
+### 3. Splunk Forwarder Setup
+
+The Splunk forwarder will read log files automatically if they're in the correct format. Joyce (Splunk admin) handles integration by using the hostname where the application is deployed.
 
 ```yaml
-# Add this container to your pod template if you need a dedicated Splunk forwarder
+# Add this container to your pod template for Splunk forwarder integration
 containers:
 - name: splunk-forwarder
   image: splunk/universalforwarder:latest
@@ -320,7 +364,16 @@ spec:
 EOF
 ```
 
+### 5. Log Configuration Notes
+
+- No Log4J vulnerability is being used
+- Add log statements to integrate with Splunk
+- Developers need a Splunk pair sequence for log review
+- Log push frequency to the Splunk server can be configured
+
 ## SMTP Configuration
+
+> **Note**: SMTP forwarder is sufficient to send emails outside the Iris network. Confirm with Yusuf if this functionality is available out of the box. SFTP is already configured in the code.
 
 ### 1. Create SMTP Connection Secrets
 
@@ -377,9 +430,41 @@ metadata:
 EOF
 ```
 
-## Post-Deployment Configuration
+### 4. Spring Configuration for SMTP
 
-### 1. Configure Horizontal Pod Autoscaling (optional)
+Configure Spring Email properties in the application:
+
+```yaml
+spring:
+  mail:
+    host: ${SMTP_HOST}
+    port: ${SMTP_PORT}
+    username: ${SMTP_USERNAME}
+    password: ${SMTP_PASSWORD}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+```
+
+### 5. Testing SMTP
+
+After deployment, perform a router test to verify email functionality:
+
+```bash
+# Test email functionality
+oc exec deploy/entity-service -- curl -X POST http://localhost:8080/api/test/email \
+  -H "Content-Type: application/json" \
+  -d '{"subject":"Test Email","body":"Testing SMTP integration"}'
+```
+
+## Resource Considerations
+
+> **Note**: Resource requests or increases are not an issue. Resources can be adjusted as needed since multiple applications are running on the same container. Past core dump issues occurred when checking file sizes, so increase resources accordingly.
+
+### 1. Configure Horizontal Pod Autoscaling
 
 ```bash
 oc autoscale deployment/entity-service --min=2 --max=5 --cpu-percent=80
@@ -423,7 +508,23 @@ spec:
 EOF
 ```
 
+### 4. Increase Resources for Processing Jobs
+
+For the Entity Service processing E files, increase CPU and memory resources:
+
+```yaml
+resources:
+  requests:
+    memory: "1Gi"    # Increased from 512Mi
+    cpu: "1000m"     # Increased from 500m
+  limits:
+    memory: "2Gi"    # Increased from 1Gi
+    cpu: "2000m"     # Increased from 1000m
+```
+
 ## Load Job Scheduling
+
+> **Note**: The Entity Service uses Spring Batch for job processing and a file watcher to pick up files. There is an existing merge job running as a cron job every night at 2:30 AM that can be used as a reference.
 
 ### 1. Configure CronJobs for Data Loading
 
@@ -646,8 +747,70 @@ oc exec deploy/entity-service -- curl -X POST http://localhost:8080/api/test/ema
   -d '{"subject":"Test Email","body":"Testing SMTP integration"}'
 ```
 
-## TSD:
+### 5. File Processing Test
 
-![Openshift-TSD-Daily-Weekly-2025-03-17-132335](https://github.com/user-attachments/assets/aac4509f-47da-4f92-8ce6-8d31a37616e5)
+To test the complete end-to-end flow, create the exact same folder structure on OpenShift and place test files there:
 
+```bash
+# Create persistent storage with folder structure matching local development
+oc apply -f - <<EOF
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: entity-service-file-storage
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 5Gi
+EOF
 
+# Mount this storage to the Entity Service pod
+# Update deployment.yaml to include:
+volumeMounts:
+- name: file-storage
+  mountPath: /app/file-input
+
+volumes:
+- name: file-storage
+  persistentVolumeClaim:
+    claimName: entity-service-file-storage
+
+# Copy test files to the persistent storage
+oc cp ./test-files/E5-daily.dat $(oc get pod -l app=entity-service -o name | head -1):/app/file-input/
+```
+
+## CI/CD Configuration
+
+### 1. Pipeline Configuration
+- Dev pipeline is active (since mid-last week)
+- Deployments are watched due to potential CD issues
+- CI/CD is set up to deploy by branch, not a specific branch
+
+### 2. Security Scans
+- Two security flags are currently disabled: scan security and quail action vulnerability
+- These will be enabled soon, but might reveal issues that need fixing
+- Previously, enabling these flags resulted in 400 issues in Phase 1
+
+### 3. Notification Configuration
+- Santosh has names of people in NCI CD configure
+- Additional email IDs can be added to notify people if a build or deployment fails
+
+## Responsibilities Matrix
+
+| Task | Responsible Team/Person | Notes |
+|------|------------------------|-------|
+| Deploying the code | Job team | Code is already deployed in entity service |
+| OpenShift segment deployment | Job team | Team needs to be confident with OpenShift deployment |
+| Splunk integration | Team with Joyce | Create a ticket for Splunk integration |
+| SMTP configuration | Yusuf | To provide feedback on SMTP configuration |
+| Monitoring deployments | TBD | Need to designate responsible persons |
+| Feedback on deployment issues | Santosh | Add more email IDs for notifications |
+| Code quality checks | Santosh and Islam | Ensure developers check in code that builds |
+
+This deployment guide covers all necessary steps for deploying your Entity Service to OpenShift with complete Splunk and SMTP integration. Adjust resource settings, scheduling, and configuration based on your specific requirements.
+
+## TSD Diagram
+
+![Openshift-TSD-Daily-Weekly-2025-03-17-134058](https://github.com/user-attachments/assets/ed89cae5-feb4-4171-a9f3-0ed3668e3544)
