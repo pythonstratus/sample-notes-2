@@ -128,9 +128,6 @@ public class OptimizedDatabaseMigrator {
         sourceDS.setUser(properties.getProperty("source.db.username"));
         sourceDS.setPassword(properties.getProperty("source.db.password"));
         sourceDS.setConnectionProperties(sourceConnProps);
-        sourceDS.setConnectionCachingEnabled(true);
-        sourceDS.setImplicitCachingEnabled(true);
-        sourceDS.setFastConnectionFailoverEnabled(true);
         
         // Connect to destination database using connection pooling
         destDS = new OracleDataSource();
@@ -138,9 +135,6 @@ public class OptimizedDatabaseMigrator {
         destDS.setUser(properties.getProperty("dest.db.username"));
         destDS.setPassword(properties.getProperty("dest.db.password"));
         destDS.setConnectionProperties(destConnProps);
-        destDS.setConnectionCachingEnabled(true);
-        destDS.setImplicitCachingEnabled(true);
-        destDS.setFastConnectionFailoverEnabled(true);
         
         // Test connections
         try (Connection srcConn = sourceDS.getConnection();
@@ -418,8 +412,13 @@ public class OptimizedDatabaseMigrator {
             // Disable connection pooling features that might cause issues
             if (destConn.isWrapperFor(OracleConnection.class)) {
                 OracleConnection oracleConn = destConn.unwrap(OracleConnection.class);
-                // Disable Fast Connection Failover to prevent threading issues
-                oracleConn.setFastConnectionFailoverEnabled(false);
+                // Set properties that might help with threading issues
+                try {
+                    oracleConn.setDefaultExecuteBatch(batchSize);
+                } catch (Exception e) {
+                    // Ignore if not supported
+                    LOGGER.warning("Could not set default execute batch: " + e.getMessage());
+                }
             }
             
             destConn.setAutoCommit(false);
