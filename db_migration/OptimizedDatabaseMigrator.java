@@ -175,52 +175,85 @@ public class OptimizedDatabaseMigrator {
         }
         
         List<String> tables = Arrays.asList(tablesProperty.split(","));
-        ExecutorService executor = Executors.newFixedThreadPool(threadPoolSize);
-        List<Future<?>> futures = new ArrayList<>();
         
-        for (String table : tables) {
-            String tableName = table.trim();
-            LOGGER.info("Starting migration for table: " + tableName);
+        // Use a thread pool only if we have multiple tables
+        int effectiveThreads = Math.min(threadPoolSize, tables.size());
+        
+        if (effectiveThreads > 1) {
+            // Parallel execution for multiple tables
+            ExecutorService executor = Executors.newFixedThreadPool(effectiveThreads);
+            List<Future<?>> futures = new ArrayList<>();
             
-            // Create destination table first (this is sequential)
-            String destinationTableName = tableName + tableSuffix + "_" + timestamp;
-            try (Connection sourceConn = sourceDS.getConnection()) {
-                createDestinationTable(sourceConn, tableName, destinationTableName);
-            } catch (SQLException e) {
-                LOGGER.severe("Error creating destination table " + destinationTableName + ": " + e.getMessage());
-                throw e;
+            for (String table : tables) {
+                String tableName = table.trim();
+                LOGGER.info("Starting migration for table: " + tableName);
+                
+                // Create destination table first (this is sequential)
+                String destinationTableName = tableName + tableSuffix + "_" + timestamp;
+                try (Connection sourceConn = sourceDS.getConnection()) {
+                    createDestinationTable(sourceConn, tableName, destinationTableName);
+                } catch (SQLException e) {
+                    LOGGER.severe("Error creating destination table " + destinationTableName + ": " + e.getMessage());
+                    throw e;
+                }
+                
+                // Submit the data copy task to the thread pool
+                Future<?> future = executor.submit(() -> {
+                    try {
+                        long startTime = System.currentTimeMillis();
+                        long rowCount = copyTableData(tableName, destinationTableName);
+                        long endTime = System.currentTimeMillis();
+                        double seconds = (endTime - startTime) / 1000.0;
+                        LOGGER.info(String.format("Table %s migration completed: %d rows in %.2f seconds (%.2f rows/sec)", 
+                            tableName, rowCount, seconds, rowCount / seconds));
+                    } catch (SQLException e) {
+                        LOGGER.severe("Error migrating table " + tableName + ": " + e.getMessage());
+                        throw new RuntimeException(e);
+                    }
+                });
+                
+                futures.add(future);
             }
             
-            // Submit the data copy task to the thread pool
-            Future<?> future = executor.submit(() -> {
+            // Wait for all migrations to complete
+            for (Future<?> future : futures) {
                 try {
+                    future.get();
+                } catch (Exception e) {
+                    LOGGER.severe("Error in table migration thread: " + e.getMessage());
+                    executor.shutdownNow();
+                    throw new SQLException("Migration failed due to thread error", e);
+                }
+            }
+            
+            executor.shutdown();
+        } else {
+            // Sequential execution for single table or if thread pool size is 1
+            for (String table : tables) {
+                String tableName = table.trim();
+                LOGGER.info("Starting migration for table: " + tableName);
+                
+                try {
+                    // Create destination table
+                    String destinationTableName = tableName + tableSuffix + "_" + timestamp;
+                    try (Connection sourceConn = sourceDS.getConnection()) {
+                        createDestinationTable(sourceConn, tableName, destinationTableName);
+                    }
+                    
+                    // Copy data
                     long startTime = System.currentTimeMillis();
                     long rowCount = copyTableData(tableName, destinationTableName);
                     long endTime = System.currentTimeMillis();
                     double seconds = (endTime - startTime) / 1000.0;
+                    
                     LOGGER.info(String.format("Table %s migration completed: %d rows in %.2f seconds (%.2f rows/sec)", 
                         tableName, rowCount, seconds, rowCount / seconds));
                 } catch (SQLException e) {
                     LOGGER.severe("Error migrating table " + tableName + ": " + e.getMessage());
-                    throw new RuntimeException(e);
+                    throw e;
                 }
-            });
-            
-            futures.add(future);
-        }
-        
-        // Wait for all migrations to complete
-        for (Future<?> future : futures) {
-            try {
-                future.get();
-            } catch (Exception e) {
-                LOGGER.severe("Error in table migration thread: " + e.getMessage());
-                executor.shutdownNow();
-                throw new SQLException("Migration failed due to thread error", e);
             }
         }
-        
-        executor.shutdown();
     }
     
     private void executePreAction() throws SQLException {
@@ -335,8 +368,8 @@ public class OptimizedDatabaseMigrator {
             }
         }
         
-        // Prepare the SQL statements
-        StringBuilder insertSQL = new StringBuilder("INSERT /*+ APPEND_VALUES */ INTO " + destTableName + " (");
+        // Prepare the SQL statements - removed APPEND_VALUES hint which can cause ORA-12838
+        StringBuilder insertSQL = new StringBuilder("INSERT INTO " + destTableName + " (");
         StringBuilder placeholders = new StringBuilder();
         
         for (int i = 0; i < columnNames.size(); i++) {
@@ -351,9 +384,10 @@ public class OptimizedDatabaseMigrator {
         
         insertSQL.append(") VALUES (").append(placeholders).append(")");
         
-        // Determine if we should use parallel query for fetching
+        // For parallel query, use a degree that won't overwhelm the system
         boolean useParallelQuery = Boolean.parseBoolean(properties.getProperty("enable.parallel.query", "true"));
-        String parallelHint = useParallelQuery ? "/*+ PARALLEL(t, 4) */" : "";
+        int parallelDegree = Math.min(2, Runtime.getRuntime().availableProcessors() / 2);
+        String parallelHint = useParallelQuery ? "/*+ PARALLEL(t, " + parallelDegree + ") */" : "";
         String selectSQL = "SELECT " + parallelHint + " * FROM " + sourceTableName + " t";
         
         // Check if the source table has an approximate row count
@@ -380,6 +414,13 @@ public class OptimizedDatabaseMigrator {
              Statement selectStmt = srcConn.createStatement();
              ResultSet sourceData = selectStmt.executeQuery(selectSQL);
              Connection destConn = destDS.getConnection()) {
+            
+            // Disable connection pooling features that might cause issues
+            if (destConn.isWrapperFor(OracleConnection.class)) {
+                OracleConnection oracleConn = destConn.unwrap(OracleConnection.class);
+                // Disable Fast Connection Failover to prevent threading issues
+                oracleConn.setFastConnectionFailoverEnabled(false);
+            }
             
             destConn.setAutoCommit(false);
             
