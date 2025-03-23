@@ -1,0 +1,33 @@
+# Source Database Configuration
+source.db.url=jdbc:oracle:thin:@(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=VLISMTBO.MCC.ABC.COM)(PORT=1701))(CONNECT_DATA=(SERVICE_NAME=ALSDEV)))
+source.db.username=als
+source.db.password=*****
+
+# Destination Database Configuration
+dest.db.url=jdbc:oracle:thin:@(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=xlmtb-dev2-scan1.mcc.abc.com)(PORT=1521))(CONNECT_DATA=(SERVICE_NAME=ALSDEVSVC.dev.abc.com)))
+dest.db.username=als
+dest.db.password=**********
+
+# Tables to Copy (comma-separated lists)
+pre.tables=E1TMP
+post.tables=E1TMP
+
+# SQL Actions (optional)
+pre.action=INSERT INTO MIGRATION_LOG VALUES (SYSDATE, 'Starting table migrations')
+post.action=INSERT INTO MIGRATION_LOG VALUES (SYSDATE, 'Completed table migrations')
+
+# Performance Tuning Parameters
+batch.size=10000
+fetch.size=50000
+parallel.threads=4
+enable.parallel.query=true
+enable.parallel.ddl=true
+gather.stats=true
+
+# Connection Pool Configuration
+connection.pool.size=10
+connection.timeout.seconds=30
+
+# Logging Configuration
+logging.level=INFO
+logging.file=db-migration.log
