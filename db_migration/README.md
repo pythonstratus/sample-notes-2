@@ -18,6 +18,7 @@ A Java-based tool for migrating tables between Oracle databases with separate pr
 - Maven 3.6.0 or higher
 - Access to Oracle databases (source and destination)
 - Oracle JDBC driver (included as a Maven dependency)
+- dest.db.url=jdbc:oracle:thin:@(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=xlmtb-dev2-scan1.mcc.abc.com)(PORT=1521))(CONNECT_DATA=(SERVICE_NAME=ALSDEVSVC.dev.abc.com)))
 
 ## Installation
 
