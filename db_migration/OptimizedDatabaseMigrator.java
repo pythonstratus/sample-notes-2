@@ -37,8 +37,8 @@ public class OptimizedDatabaseMigrator {
     private int threadPoolSize;
     private int batchSize;
     private int fetchSize;
-    private Map<String, String> sourceConnProps = new HashMap<>();
-    private Map<String, String> destConnProps = new HashMap<>();
+    private Properties sourceConnProps = new Properties();
+    private Properties destConnProps = new Properties();
 
     public static void main(String[] args) {
         OptimizedDatabaseMigrator migrator = new OptimizedDatabaseMigrator();
@@ -113,12 +113,12 @@ public class OptimizedDatabaseMigrator {
         LOGGER.info("Using fetch size: " + fetchSize);
         
         // Configure connection properties for better performance
-        sourceConnProps.put(OracleConnection.CONNECTION_PROPERTY_THIN_NET_CHECKSUM_TYPES, "");
-        sourceConnProps.put(OracleConnection.CONNECTION_PROPERTY_THIN_NET_ENCRYPTION_TYPES, "");
-        sourceConnProps.put(OracleConnection.CONNECTION_PROPERTY_DEFAULT_ROW_PREFETCH, String.valueOf(fetchSize));
+        sourceConnProps.setProperty(OracleConnection.CONNECTION_PROPERTY_THIN_NET_CHECKSUM_TYPES, "");
+        sourceConnProps.setProperty(OracleConnection.CONNECTION_PROPERTY_THIN_NET_ENCRYPTION_TYPES, "");
+        sourceConnProps.setProperty(OracleConnection.CONNECTION_PROPERTY_DEFAULT_ROW_PREFETCH, String.valueOf(fetchSize));
         
-        destConnProps.put(OracleConnection.CONNECTION_PROPERTY_THIN_NET_CHECKSUM_TYPES, "");
-        destConnProps.put(OracleConnection.CONNECTION_PROPERTY_THIN_NET_ENCRYPTION_TYPES, "");
+        destConnProps.setProperty(OracleConnection.CONNECTION_PROPERTY_THIN_NET_CHECKSUM_TYPES, "");
+        destConnProps.setProperty(OracleConnection.CONNECTION_PROPERTY_THIN_NET_ENCRYPTION_TYPES, "");
         
         LOGGER.info("Initializing database connections");
         
