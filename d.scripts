@@ -153,3 +153,44 @@ If tablespace issues are confirmed, addressing them might require:
 4. Updating the database statistics after changes
 
 Tablespace issues could very well be the root cause behind the duplicate index entries you're seeing.
+
+
+Yes, that's absolutely a plausible explanation for what you're seeing. If similar indexes were created across different schemas but with the same names, this could cause the duplication in your index count.
+
+Here's how this might be happening:
+
+1. The query that generates COREindexes.out might be looking at indexes across multiple schemas (not just DIALDEV)
+
+2. If the same index structure was created in both the DIALDEV schema and another schema (perhaps a backup, test, or development schema), your query might be counting both
+
+3. The index query might not be filtering by schema/owner properly, so it's returning indexes from all schemas that have access to the COREDIAL table
+
+To verify this theory, you could run a query that explicitly shows the schema owner for each index:
+
+```sql
+SELECT owner, index_name, table_name, status 
+FROM all_indexes 
+WHERE table_name = 'COREDIAL'
+ORDER BY owner, index_name;
+```
+
+This would show if the same index names exist across different schemas. If this is the case, you could modify your index checking script to either:
+
+1. Filter by the specific schema you want to check:
+```sql
+SELECT index_name, status 
+FROM all_indexes 
+WHERE table_name = 'COREDIAL' 
+  AND owner = 'DIALDEV'
+ORDER BY index_name;
+```
+
+2. Or modify the script to account for the fact that indexes might exist in multiple schemas but should only be counted once:
+```sql
+SELECT DISTINCT index_name, status 
+FROM all_indexes 
+WHERE table_name = 'COREDIAL' 
+ORDER BY index_name;
+```
+
+This scenario of having the same indexes in multiple schemas would perfectly explain why you're seeing exactly double the expected number of indexes (14 instead of 7).
