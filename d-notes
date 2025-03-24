@@ -1,0 +1,34 @@
+Based on the information provided, I can see there's an issue with the DIAL system in the Dev environment related to database indexes. Let me analyze what's happening:
+
+The script `Dial9_chkindexes` is checking for database indexes and expecting exactly 7 rows (indexes) as indicated by this line:
+```bash
+set cntchk = `grep "7 rows selected." $CONSOLDIR/COREindexes.out | wc -l`
+```
+
+However, when examining the COREindexes.out file, it shows 14 rows selected rather than the expected 7, which is causing the error:
+```
+ERROR: All COREDIAL indexes are not created please look at COREindexes.out.
+```
+
+Looking at the COREindexes.out content, there seems to be duplication of indexes:
+- PK_CORE appears twice
+- AO_IX appears twice
+- CORETIN_IX appears twice
+- DIAL_ROID_IX appears twice
+- GRNUM_IX appears twice
+- QGRP_IX appears twice
+- SWITCHPROID_IX appears twice
+
+The issue is that there are 7 unique indexes, but each one appears to be listed twice, resulting in 14 rows total. This is why the check is failing - it's expecting exactly 7 rows but finding 14.
+
+Possible causes:
+1. Someone may have created duplicate indexes in the Dev environment
+2. The query that populates COREindexes.out might be joining tables in a way that creates duplicate results
+3. The output format of the query might have changed, causing the grep pattern to fail
+
+Suggested solutions:
+1. Check if indexes were duplicated in the database - this might require removing the duplicate indexes
+2. Review and modify the SQL query that generates COREindexes.out to ensure it only returns unique indexes
+3. As a temporary fix, you could modify the script to accommodate the current situation by changing the check from "7 rows selected" to "14 rows selected", though this is just a workaround until the root cause is addressed
+
+Based on Sue Cox's email, it appears this issue happened before, and it seems to be related to additional indexes being present in the Dev environment compared to what the script expects.
