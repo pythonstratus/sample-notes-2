@@ -1,0 +1,155 @@
+Here are some script suggestions to fix the DIAL index issue:
+
+1. **Script to check and display unique indexes only:**
+
+```sql
+-- Save as fix_index_query.sql
+-- This modifies how indexes are queried to avoid duplicates
+SELECT DISTINCT index_name, status 
+FROM all_indexes 
+WHERE table_name = 'COREDIAL' 
+  AND owner = '[SCHEMA_OWNER]';
+```
+
+2. **Script to modify the index checking process:**
+
+```bash
+#!/bin/bash
+# Save as fix_dial9_chkindexes.sh
+
+# Backup original script
+cp $CONSOLDIR/Dial9_chkindexes $CONSOLDIR/Dial9_chkindexes.bak
+
+# Modify the script to handle the current reality of 14 rows
+sed -i 's/grep "7 rows selected." $CONSOLDIR\/COREindexes.out/grep "14 rows selected." $CONSOLDIR\/COREindexes.out/g' $CONSOLDIR/Dial9_chkindexes
+
+echo "Script updated to check for 14 rows instead of 7"
+```
+
+3. **Script to identify and drop duplicate indexes:**
+
+```sql
+-- Save as drop_duplicate_indexes.sql
+-- First identify duplicates
+WITH index_counts AS (
+  SELECT index_name, COUNT(*) as cnt
+  FROM all_indexes
+  WHERE table_name = 'COREDIAL'
+    AND owner = '[SCHEMA_OWNER]'
+  GROUP BY index_name
+  HAVING COUNT(*) > 1
+)
+SELECT i.index_name, i.index_type, i.uniqueness, i.status
+FROM all_indexes i
+JOIN index_counts ic ON i.index_name = ic.index_name
+WHERE i.table_name = 'COREDIAL'
+  AND i.owner = '[SCHEMA_OWNER]'
+ORDER BY i.index_name;
+
+-- After reviewing, use commands like this to drop duplicates:
+-- DROP INDEX [SCHEMA_OWNER].[DUPLICATE_INDEX_NAME];
+```
+
+4. **Shell script to update the checking logic:**
+
+```bash
+#!/bin/bash
+# Save as update_index_check.sh
+
+# Create a new version of the check that counts unique indexes
+cat > $CONSOLDIR/Dial9_chkindexes_new << 'EOF'
+#!/bin/sh
+echo "----- running Dial9_chkindexes  ---------" >> $CONSOLDIR/diallog
+date >> $CONSOLDIR/diallog
+Dial9_chkindexes >& /dev/null
+    cat /dev/null > $CONSOLDIR/diallog.errs
+echo "----- Checking Coredial indexes ------------------" >> $CONSOLDIR/diallog
+date >> $CONSOLDIR/diallog
+
+# Modified to count unique index names rather than raw row count
+set cntchk = `awk '!seen[$1]++ && /VALID/' $CONSOLDIR/COREindexes.out | wc -l`
+if ($cntchk != 7) then
+    echo " " >> $CONSOLDIR/diallog
+    echo "ERROR: All COREDIAL indexes are not created please look at COREindexes.out." >> $CONSOLDIR/diallog.errs
+    echo " " >>$CONSOLDIR/diallog
+endif
+echo "----- Completed Dial9_chkindexes -----------------" >> $CONSOLDIR/diallog
+EOF
+
+# Make it executable
+chmod +x $CONSOLDIR/Dial9_chkindexes_new
+
+# Backup original and replace
+mv $CONSOLDIR/Dial9_chkindexes $CONSOLDIR/Dial9_chkindexes.original
+mv $CONSOLDIR/Dial9_chkindexes_new $CONSOLDIR/Dial9_chkindexes
+```
+
+5. **SQL script to properly list core indexes:**
+
+```sql
+-- Save as update_core_indexes_query.sql
+-- Replace current query with this one to generate COREindexes.out
+
+-- First truncate the output file
+SET HEADING OFF;
+SET FEEDBACK OFF;
+SPOOL $CONSOLDIR/COREindexes.out
+SELECT DISTINCT index_name, status 
+FROM all_indexes 
+WHERE table_name = 'COREDIAL'
+  AND owner = '[SCHEMA_OWNER]'
+ORDER BY index_name;
+
+-- Count the unique indexes
+SELECT COUNT(DISTINCT index_name) || ' rows selected.' 
+FROM all_indexes 
+WHERE table_name = 'COREDIAL'
+  AND owner = '[SCHEMA_OWNER]';
+SPOOL OFF;
+```
+
+Each of these scripts addresses a different aspect of the problem:
+- Modifying how indexes are queried to avoid duplicates
+- Updating the check to match the current reality
+- Identifying and potentially removing duplicate indexes
+- Updating the script logic to count unique indexes rather than raw output rows
+- Rewriting the query to properly generate the expected output format
+
+For implementation, I'd recommend first backing up all files before making changes, then implementing the solution that best fits your environment after reviewing the suggestions with your database administrator.
+
+
+
+Yes, tablespace issues could definitely be related to this problem, though in a slightly different way than direct duplication.
+
+When tablespace issues occur, particularly in Oracle databases, several scenarios might cause the behavior you're seeing:
+
+1. **Partially created indexes**: When tablespace fills up during index creation, it might result in partially created indexes or corrupt index metadata. The system might show these as valid but they're not fully functional.
+
+2. **Index rebuilding attempts**: If someone tried to rebuild indexes due to tablespace issues, they might have created new indexes before dropping old ones, resulting in duplicates appearing in the metadata.
+
+3. **Different tablespace locations**: The database might be showing indexes twice because they exist in different tablespaces. For example, if an index was recreated in a different tablespace without dropping the original, both might appear in the metadata.
+
+4. **Fragmentation and reorganization**: Tablespace reorganization due to space issues might have caused index metadata to be duplicated in the data dictionary.
+
+To investigate this possibility, you could run a query to check tablespace usage and see if indexes are stored in different tablespaces:
+
+```sql
+SELECT i.index_name, i.tablespace_name, i.status, s.bytes/1024/1024 MB_SIZE, 
+       s.blocks, s.extents
+FROM all_indexes i
+JOIN all_segments s ON (i.index_name = s.segment_name AND s.segment_type = 'INDEX')
+WHERE i.table_name = 'COREDIAL'
+  AND i.owner = '[SCHEMA_OWNER]'
+ORDER BY i.index_name;
+```
+
+This would show if the same index name exists in multiple tablespaces or if there are space allocation issues with any of the indexes.
+
+If tablespace issues are confirmed, addressing them might require:
+
+1. Cleaning up unused space in tablespaces
+2. Dropping duplicate indexes
+3. Rebuilding indexes in the correct tablespace
+4. Updating the database statistics after changes
+
+Tablespace issues could very well be the root cause behind the duplicate index entries you're seeing.
