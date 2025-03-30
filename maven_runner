@@ -1,0 +1,309 @@
+// Backend structure: src/main/java/com/testrunner/
+
+// File: src/main/java/com/testrunner/TestRunnerApplication.java
+package com.testrunner;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class TestRunnerApplication {
+    public static void main(String[] args) {
+        SpringApplication.run(TestRunnerApplication.class, args);
+    }
+}
+
+// File: src/main/java/com/testrunner/config/WebSocketConfig.java
+package com.testrunner.config;
+
+import org.springframework.context.annotation.Configuration;
+import org.springframework.messaging.simp.config.MessageBrokerRegistry;
+import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
+import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
+import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
+
+@Configuration
+@EnableWebSocketMessageBroker
+public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
+
+    @Override
+    public void configureMessageBroker(MessageBrokerRegistry config) {
+        config.enableSimpleBroker("/topic");
+        config.setApplicationDestinationPrefixes("/app");
+    }
+
+    @Override
+    public void registerStompEndpoints(StompEndpointRegistry registry) {
+        registry.addEndpoint("/ws").setAllowedOriginPatterns("*").withSockJS();
+    }
+}
+
+// File: src/main/java/com/testrunner/model/TestJob.java
+package com.testrunner.model;
+
+public class TestJob {
+    private String jobId;
+    private String type;
+    private String status;
+    private String command;
+
+    public TestJob() {
+    }
+
+    public TestJob(String jobId, String type, String command) {
+        this.jobId = jobId;
+        this.type = type;
+        this.status = "IDLE";
+        this.command = command;
+    }
+
+    public String getJobId() {
+        return jobId;
+    }
+
+    public void setJobId(String jobId) {
+        this.jobId = jobId;
+    }
+
+    public String getType() {
+        return type;
+    }
+
+    public void setType(String type) {
+        this.type = type;
+    }
+
+    public String getStatus() {
+        return status;
+    }
+
+    public void setStatus(String status) {
+        this.status = status;
+    }
+
+    public String getCommand() {
+        return command;
+    }
+
+    public void setCommand(String command) {
+        this.command = command;
+    }
+}
+
+// File: src/main/java/com/testrunner/model/TestUpdate.java
+package com.testrunner.model;
+
+public class TestUpdate {
+    private String jobId;
+    private String status;
+    private String log;
+    private boolean complete;
+
+    public TestUpdate() {
+    }
+
+    public TestUpdate(String jobId, String status, String log, boolean complete) {
+        this.jobId = jobId;
+        this.status = status;
+        this.log = log;
+        this.complete = complete;
+    }
+
+    public String getJobId() {
+        return jobId;
+    }
+
+    public void setJobId(String jobId) {
+        this.jobId = jobId;
+    }
+
+    public String getStatus() {
+        return status;
+    }
+
+    public void setStatus(String status) {
+        this.status = status;
+    }
+
+    public String getLog() {
+        return log;
+    }
+
+    public void setLog(String log) {
+        this.log = log;
+    }
+
+    public boolean isComplete() {
+        return complete;
+    }
+
+    public void setComplete(boolean complete) {
+        this.complete = complete;
+    }
+}
+
+// File: src/main/java/com/testrunner/controller/TestController.java
+package com.testrunner.controller;
+
+import com.testrunner.model.TestJob;
+import com.testrunner.service.TestExecutionService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.Map;
+import java.util.UUID;
+
+@RestController
+@RequestMapping("/api/tests")
+@CrossOrigin(origins = "*")
+public class TestController {
+
+    private final TestExecutionService testExecutionService;
+
+    @Autowired
+    public TestController(TestExecutionService testExecutionService) {
+        this.testExecutionService = testExecutionService;
+    }
+
+    @PostMapping("/run/{type}")
+    public Map<String, String> runTest(@PathVariable String type) {
+        String jobId = UUID.randomUUID().toString();
+        testExecutionService.executeTest(jobId, type);
+        return Map.of("jobId", jobId, "status", "RUNNING");
+    }
+
+    @GetMapping("/status/{jobId}")
+    public TestJob getStatus(@PathVariable String jobId) {
+        return testExecutionService.getJobStatus(jobId);
+    }
+}
+
+// File: src/main/java/com/testrunner/service/TestExecutionService.java
+package com.testrunner.service;
+
+import com.testrunner.model.TestJob;
+import com.testrunner.model.TestUpdate;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.stereotype.Service;
+
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
+@Service
+public class TestExecutionService {
+
+    private final SimpMessagingTemplate messagingTemplate;
+    private final Map<String, TestJob> jobs = new ConcurrentHashMap<>();
+    private final ExecutorService executorService = Executors.newCachedThreadPool();
+
+    private final Map<String, String> testCommands = new ConcurrentHashMap<>();
+    
+    @Autowired
+    public TestExecutionService(SimpMessagingTemplate messagingTemplate, 
+                               @Value("${test.command.daily}") String dailyCommand,
+                               @Value("${test.command.weekly}") String weeklyCommand,
+                               @Value("${test.command.monthly}") String monthlyCommand) {
+        this.messagingTemplate = messagingTemplate;
+        
+        // Initialize test commands from properties
+        testCommands.put("daily", dailyCommand);
+        testCommands.put("weekly", weeklyCommand);
+        testCommands.put("monthly", monthlyCommand);
+    }
+
+
+
+    public void executeTest(String jobId, String type) {
+        if (!testCommands.containsKey(type)) {
+            sendUpdate(jobId, "FAILED", "Invalid test type: " + type, true);
+            return;
+        }
+
+        String command = testCommands.get(type);
+        TestJob job = new TestJob(jobId, type, command);
+        job.setStatus("RUNNING");
+        jobs.put(jobId, job);
+
+        // Send initial update
+        sendUpdate(jobId, "RUNNING", "Starting " + type + " test...", false);
+
+        executorService.submit(() -> runProcess(job));
+    }
+
+    private void runProcess(TestJob job) {
+        ProcessBuilder processBuilder = new ProcessBuilder();
+        
+        // Set the working directory if necessary
+        // processBuilder.directory(new File("/path/to/your/project"));
+
+        // Set up the command based on the OS
+        String os = System.getProperty("os.name").toLowerCase();
+        if (os.contains("windows")) {
+            processBuilder.command("cmd.exe", "/c", job.getCommand());
+        } else if (os.contains("linux") || os.contains("unix") || os.contains("mac")) {
+            processBuilder.command("bash", "-c", job.getCommand());
+        } else {
+            // Fallback for other operating systems
+            sendUpdate(job.getJobId(), "FAILED", "Unsupported operating system: " + os, true);
+            job.setStatus("FAILED");
+            return;
+        }
+
+        processBuilder.redirectErrorStream(true);
+
+        try {
+            Process process = processBuilder.start();
+            
+            // Read the output
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(process.getInputStream()))) {
+                
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    // Send real-time updates
+                    sendUpdate(job.getJobId(), "RUNNING", line, false);
+                    Thread.sleep(10); // Small delay to avoid overwhelming the websocket
+                }
+            }
+
+            int exitCode = process.waitFor();
+            
+            // Update job status based on exit code
+            if (exitCode == 0) {
+                job.setStatus("SUCCESS");
+                sendUpdate(job.getJobId(), "SUCCESS", "Test completed successfully", true);
+            } else {
+                job.setStatus("FAILED");
+                sendUpdate(job.getJobId(), "FAILED", "Test failed with exit code: " + exitCode, true);
+            }
+            
+        } catch (Exception e) {
+            job.setStatus("FAILED");
+            sendUpdate(job.getJobId(), "FAILED", "Error executing test: " + e.getMessage(), true);
+        }
+    }
+
+    private void sendUpdate(String jobId, String status, String log, boolean complete) {
+        TestUpdate update = new TestUpdate(jobId, status, log, complete);
+        messagingTemplate.convertAndSend("/topic/updates/" + jobId, update);
+    }
+
+    public TestJob getJobStatus(String jobId) {
+        return jobs.getOrDefault(jobId, new TestJob(jobId, "unknown", ""));
+    }
+}
+
+// File: src/main/resources/application.properties
+// src/main/resources/application.properties
+server.port=8080
+
+# Test commands configuration
+test.command.daily=mvn test -Dtest=DatabaseSnapshotServiceTest#testCreateSnapshotAndValidateForDailyTables
+test.command.weekly=mvn test -Dtest=DatabaseSnapshotServiceTest#testCreateSnapshotAndValidateForWeeklyTables
+test.command.monthly=mvn test -Dtest=DatabaseSnapshotServiceTest#testCreateSnapshotAndValidateForMonthlyTables
