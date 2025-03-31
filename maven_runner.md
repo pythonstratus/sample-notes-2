@@ -1,4 +1,3 @@
-// File: pom.xml
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0" 
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -21,8 +20,6 @@
 
     <properties>
         <java.version>17</java.version>
-        <node.version>v16.17.0</node.version>
-        <npm.version>8.15.0</npm.version>
         <frontend.src.dir>${project.basedir}/src/main/webapp</frontend.src.dir>
     </properties>
 
@@ -50,47 +47,42 @@
                 <artifactId>spring-boot-maven-plugin</artifactId>
             </plugin>
             
-            <!-- Frontend Maven Plugin -->
+            <!-- Use existing npm and node for frontend build -->
             <plugin>
-                <groupId>com.github.eirslett</groupId>
-                <artifactId>frontend-maven-plugin</artifactId>
-                <version>1.12.1</version>
-                <configuration>
-                    <workingDirectory>${frontend.src.dir}</workingDirectory>
-                    <installDirectory>${project.build.directory}</installDirectory>
-                </configuration>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>3.1.0</version>
                 <executions>
-                    <!-- Install Node and NPM -->
-                    <execution>
-                        <id>install-node-and-npm</id>
-                        <goals>
-                            <goal>install-node-and-npm</goal>
-                        </goals>
-                        <configuration>
-                            <nodeVersion>${node.version}</nodeVersion>
-                            <npmVersion>${npm.version}</npmVersion>
-                        </configuration>
-                    </execution>
-                    
                     <!-- Install dependencies -->
                     <execution>
                         <id>npm-install</id>
+                        <phase>generate-resources</phase>
                         <goals>
-                            <goal>npm</goal>
+                            <goal>exec</goal>
                         </goals>
                         <configuration>
-                            <arguments>install</arguments>
+                            <executable>npm</executable>
+                            <arguments>
+                                <argument>install</argument>
+                            </arguments>
+                            <workingDirectory>${frontend.src.dir}</workingDirectory>
                         </configuration>
                     </execution>
                     
                     <!-- Build frontend -->
                     <execution>
                         <id>npm-build</id>
+                        <phase>generate-resources</phase>
                         <goals>
-                            <goal>npm</goal>
+                            <goal>exec</goal>
                         </goals>
                         <configuration>
-                            <arguments>run build</arguments>
+                            <executable>npm</executable>
+                            <arguments>
+                                <argument>run</argument>
+                                <argument>build</argument>
+                            </arguments>
+                            <workingDirectory>${frontend.src.dir}</workingDirectory>
                         </configuration>
                     </execution>
                 </executions>
@@ -159,19 +151,24 @@ A full-stack web application for running Maven tests with real-time feedback.
    cd test-runner
    ```
 
-2. Build and run the backend
-   ```bash
-   mvn spring-boot:run
-   ```
-
-3. In a separate terminal, build and run the frontend
+2. Prepare the frontend dependencies (ensure you have Node.js and npm installed)
    ```bash
    cd src/main/webapp
    npm install
-   npm start
    ```
 
-4. Access the application at http://localhost:3000
+3. Return to the project root and build/run the application
+   ```bash
+   cd ../../../
+   mvn spring-boot:run
+   ```
+
+4. For development mode with hot-reload on the frontend, you can also run:
+   ```bash
+   cd src/main/webapp
+   npm start
+   ```
+   And access the dev server at http://localhost:3000
 
 ### Building for Production
 
@@ -217,40 +214,3 @@ To add new test types, you'll need to:
 ### Working Directory
 
 If your Maven commands need to run in
-
-
-
-
-test-runner/
-├── src/
-│   ├── main/
-│   │   ├── java/
-│   │   │   └── com/
-│   │   │       └── testrunner/
-│   │   │           ├── TestRunnerApplication.java
-│   │   │           ├── config/
-│   │   │           │   └── WebSocketConfig.java
-│   │   │           ├── controller/
-│   │   │           │   └── TestController.java
-│   │   │           ├── model/
-│   │   │           │   ├── TestJob.java
-│   │   │           │   └── TestUpdate.java
-│   │   │           └── service/
-│   │   │               └── TestExecutionService.java
-│   │   ├── resources/
-│   │   │   └── application.properties
-│   │   └── webapp/
-│   │       ├── public/
-│   │       │   └── index.html
-│   │       ├── src/
-│   │       │   ├── App.js
-│   │       │   ├── App.css
-│   │       │   ├── index.js
-│   │       │   └── components/
-│   │       │       └── TestPanel.js
-│   │       └── package.json
-├── pom.xml
-├── Dockerfile
-├── docker-compose.yml
-├── .dockerignore
-└── README.md
