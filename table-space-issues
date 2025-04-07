@@ -105,3 +105,10 @@ Best regards,
 [Your Name]
 [Your Position]
 [Contact Information]
+
+
+Recap of Key Issues
+
+Extract Date Derivation: Snapshot date needs to be derived from the dataset using the max function rather than using system date.
+Command-Line Parameters: The hard-coded date requires enhancement to allow passing via command prompt for greater flexibility.
+Naming Convention Requirements: Diane (not Dyne) expects "pre" and "post" prefixes for snapshot tables, which the current code doesn't properly handle.
