@@ -1,0 +1,49 @@
+# ETL Challenges Summary
+
+## Core Issues
+- **ETL Order Problem**: ETLs run sequentially but not in correct order (e.g., E3 runs before E5)
+- **Test Synchronization Issues**: Tests run in random order instead of sequentially
+  - Solution: Add test method order annotations
+- **Code Not Synchronized**: System lacks proper sequential processing
+
+## Error Handling Requirements
+- If an extract fails mid-process, all tasks should terminate
+- Email notifications should be triggered
+- Source file issues (missing/corrupted) should stop the entire job
+- Error details should be displayed in sustainment workbench
+
+## Specific Data Issues
+- **E3 Failure**: Failed due to DAT file issue
+  - Same files ran successfully in Legacy system
+  - Need to determine how Legacy handled these issues
+- **S1 File**: Column length updated from 54/59 to 64
+- **E5 Record Issue**: E5 record was incorrectly removed from log load table after E3 failure
+
+## Job Status Problems
+- System not writing to job status table for every job
+- Query error: "not a valid month"
+- Data type discrepancy in update statement
+
+## Data Comparison Concerns
+- Spreadsheet comparing pre/post weekly data shows discrepancies
+- Need review before wider sharing
+
+## Notification Strategy
+- Planning to use Splunk for notifications instead of email
+- Need comprehensive error logging for Splunk consumption
+
+## Proposed Data Storage Solution
+- Reconsidering materialized views due to archive space issues
+- Parquet file with UI utility approach suggested as alternative
+  - Better for tracking bug fix progression
+  - Can be read quickly with JFreeChart reader
+
+## Recap of Key Issues
+1. **Extract Date Derivation**: Snapshot date needs to be derived from the dataset using the max function rather than using system date.
+2. **Command-Line Parameters**: The hard-coded date requires enhancement to allow passing via command prompt for greater flexibility.
+3. **Naming Convention Requirements**: Diane (not Dyne) expects "pre" and "post" prefixes for snapshot tables, which the current code doesn't properly handle.
+
+## Next Steps
+- Fix issues immediately (today and tomorrow morning)
+- Create tickets for major bugs
+- Share compiled meeting notes
