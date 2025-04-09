@@ -1,0 +1,53 @@
+ETL Testing Project Executive Summary
+Current Status
+
+The ETL testing project is experiencing significant challenges after two months of effort with limited progress beyond rudimentary unit testing
+A comprehensive testing approach has now been outlined by Diane but execution has stalled due to implementation issues
+Key problems include ETL processes not running in the required sequential order (E3, E5, E8) and improper use of database snapshots
+
+Testing Methodology
+
+Process: Compare legacy system to new system using database snapshots
+
+Take pre-snapshots of legacy database
+Load snapshots into modern environment tables
+Run ETL processes with matching date parameters
+Compare post-snapshots to verify data integrity
+
+
+Data Sources: Daily input files (positional flat text files, not CSVs) from ICS system
+Validation Requirements: Both count and row-level data accuracy
+
+Critical Priorities
+
+Implement the three-step verification process:
+
+Copy pre-snapshots into exadata tables
+Run ETL processes in correct sequence
+Compare results against post-snapshots to Diane's spreadsheet on IRS SP site
+
+
+Begin populating the test tracking spreadsheet with legacy and new database counts
+Implement proper error handling (atomic transactions with rollback capability)
+Add validation rules for special cases (S1 changes, E6 monthly processing)
+
+Action Plan
+
+Team is taking a "hawkish approach" with minimum two meetings daily to accelerate progress
+Developing a web-based testing solution deployable to local Kubernetes/OpenShift environment
+Debugging has begun with Paul leading technical implementation
+Snapshot table naming conventions being standardized by Ranjita
+
+Next Steps
+
+Santosh will treat Diane's approach as "gospel" and implement with accuracy
+Team will present updated approach within 1-2 days
+Continuous feedback loop established with Diane to refine testing strategy
+Focus on getting successful test runs before implementing detailed validations
+
+Key Team Members
+
+Diane: Project oversight and testing methodology
+Santosh: Implementation lead
+Paul, Ranjita, Ravi: Technical implementation and support
+RetryClaude can make mistakes. Please double-check responses.
