@@ -51,3 +51,14 @@ Diane: Project oversight and testing methodology
 Santosh: Implementation lead
 Paul, Ranjita, Ravi: Technical implementation and support
 RetryClaude can make mistakes. Please double-check responses.
+
+
+Legacy ETL Job Process Description
+I have a legacy ETL (Extract, Transform, Load) job that processes a series of RAW DAT files on different schedules:
+Current Process
+
+The job runs on both Daily and Weekly schedules
+For the Daily schedule, the process runs multiple components in sequence (e.g., E5 runs first, then E3)
+Each component processes specific RAW DAT files
+The system currently uses an "all or nothing" approach to transactions
+When one component fails (e.g., E3), the entire job rolls back, including any previously successful components (like E5)
