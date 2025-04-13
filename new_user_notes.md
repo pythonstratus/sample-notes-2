@@ -1,167 +1,133 @@
-# Instructions for Executing Oracle User Creation Stored Procedure
+# Enhanced Oracle User Creation with Role Management
 
-## Prerequisites
-- Oracle Database client tools installed (SQL*Plus or SQLcl)
-- DBA privileges (SYSDBA or user with CREATE USER and GRANT privileges)
-- Access to the database server
+## Overview
+This script provides a comprehensive solution for Oracle DBAs to create multiple users with MD5 hashed passwords and standardized permissions through roles. It's designed to work with tools like TOAD and Spring Boot applications.
 
-## Step-by-Step Execution Instructions
-
-### 1. Connect to the Database with DBA Privileges
-
-Using SQL*Plus:
-```sql
-sqlplus username/password@database AS SYSDBA
-```
-
-Or using SQLcl:
-```sql
-sql username/password@database AS SYSDBA
-```
-
-Replace `username`, `password`, and `database` with your actual credentials and database service name.
-
-### 2. Check Required Privileges
-
-Verify you have the necessary privileges:
-```sql
-SELECT * FROM SESSION_PRIVS WHERE PRIVILEGE IN 
-('CREATE USER', 'CREATE PROCEDURE', 'CREATE SESSION', 'ALTER USER');
-```
-
-### 3. Create the Stored Procedure
-
-Copy and paste the entire stored procedure script into your SQL client and execute it. The script should include:
+## Script
 
 ```sql
-CREATE OR REPLACE PROCEDURE create_new_user (
-    p_username IN VARCHAR2,
-    p_generated_username OUT VARCHAR2,
-    p_generated_password OUT VARCHAR2
-)
-AUTHID CURRENT_USER
-IS
-    v_random_str VARCHAR2(100);
-    v_password VARCHAR2(100);
-    v_hash_raw RAW(16);
-    v_hash_hex VARCHAR2(32);
+-- First, create the role for standardized permissions
+CREATE OR REPLACE PROCEDURE setup_als_roles IS
 BEGIN
-    -- Generate a random string as the base for password
-    v_random_str := DBMS_RANDOM.STRING('A', 16);
+  -- Create role (will ignore if it already exists)
+  BEGIN
+    EXECUTE IMMEDIATE 'CREATE ROLE als_user_role';
+  EXCEPTION
+    WHEN OTHERS THEN
+      IF SQLCODE = -955 THEN NULL; -- Role already exists
+      ELSE RAISE;
+      END IF;
+  END;
+  
+  -- Grant necessary permissions to the role
+  EXECUTE IMMEDIATE 'GRANT SELECT, INSERT, DELETE ON [schema_name].[object_name] TO als_user_role';
+END;
+/
+
+-- Main procedure for batch user creation with MD5 passwords
+CREATE OR REPLACE PROCEDURE create_multiple_users (
+  p_usernames IN SYS.ODCIVARCHAR2LIST,
+  p_return_passwords OUT SYS.ODCIVARCHAR2LIST
+) AUTHID CURRENT_USER IS
+  v_random_str VARCHAR2(100);
+  v_password VARCHAR2(100);
+  v_hash_raw RAW(16);
+  v_hash_hex VARCHAR2(32);
+BEGIN
+  -- First ensure the role exists
+  setup_als_roles;
+  
+  -- Initialize the output collection
+  p_return_passwords := SYS.ODCIVARCHAR2LIST();
+  
+  -- Process each username
+  FOR i IN 1..p_usernames.COUNT LOOP
+    -- Generate random string as password base
+    v_random_str := DBMS_RANDOM.STRING('A', 16) || TO_CHAR(SYSTIMESTAMP, 'YYYYMMDDHH24MISSFF');
     
-    -- Generate MD5 hash of the random string
+    -- Generate MD5 hash
     v_hash_raw := DBMS_CRYPTO.HASH(
-                    src => UTL_RAW.CAST_TO_RAW(v_random_str),
-                    typ => DBMS_CRYPTO.HASH_MD5);
+                  src => UTL_RAW.CAST_TO_RAW(v_random_str),
+                  typ => DBMS_CRYPTO.HASH_MD5);
     
-    -- Convert hash to hex
+    -- Convert to hex and take first 8 chars
     v_hash_hex := RAWTOHEX(v_hash_raw);
-    
-    -- Take first 8 characters of the hash as password
     v_password := SUBSTR(v_hash_hex, 1, 8);
     
-    -- Create the Oracle user
-    EXECUTE IMMEDIATE 'CREATE USER ' || DBMS_ASSERT.ENQUOTE_NAME(p_username) || 
-                      ' IDENTIFIED BY ' || DBMS_ASSERT.ENQUOTE_LITERAL(v_password);
-                      
-    -- Grant privileges on ENTITYDEV.ALS table
-    EXECUTE IMMEDIATE 'GRANT SELECT, INSERT, DELETE ON ENTITYDEV.ALS TO ' || 
-                      DBMS_ASSERT.ENQUOTE_NAME(p_username);
-    
-    -- Set output parameters
-    p_generated_username := p_username;
-    p_generated_password := v_password;
-    
-    -- Commit the transaction
-    COMMIT;
-    
-EXCEPTION
-    WHEN OTHERS THEN
-        ROLLBACK;
-        RAISE;
-END create_new_user;
-/
-```
-
-### 4. Enable DBMS_OUTPUT to See Results
-
-```sql
-SET SERVEROUTPUT ON SIZE 1000000;
-```
-
-### 5. Execute the Procedure
-
-Use the following PL/SQL block to call the procedure. Make sure to replace 'NEW_USERNAME' with the actual username you want to create:
-
-```sql
-DECLARE
-    v_username VARCHAR2(30);
-    v_password VARCHAR2(30);
-BEGIN
-    -- Call the procedure to create a new user
-    create_new_user(
-        p_username => 'NEW_USERNAME',
-        p_generated_username => v_username,
-        p_generated_password => v_password
-    );
-    
-    -- Output the results
-    DBMS_OUTPUT.PUT_LINE('Username: ' || v_username);
-    DBMS_OUTPUT.PUT_LINE('Password: ' || v_password);
+    -- Create the user
+    BEGIN
+      EXECUTE IMMEDIATE 'CREATE USER ' || DBMS_ASSERT.ENQUOTE_NAME(p_usernames(i)) || 
+                       ' IDENTIFIED BY ' || DBMS_ASSERT.ENQUOTE_LITERAL(v_password) ||
+                       ' DEFAULT TABLESPACE USERS QUOTA UNLIMITED ON USERS';
+                       
+      -- Grant connect for basic login capability
+      EXECUTE IMMEDIATE 'GRANT CONNECT TO ' || DBMS_ASSERT.ENQUOTE_NAME(p_usernames(i));
+      
+      -- Grant the role with table privileges
+      EXECUTE IMMEDIATE 'GRANT als_user_role TO ' || DBMS_ASSERT.ENQUOTE_NAME(p_usernames(i));
+      
+      -- Add password to return collection
+      p_return_passwords.EXTEND;
+      p_return_passwords(p_return_passwords.COUNT) := p_usernames(i) || ':' || v_password;
+    EXCEPTION
+      WHEN OTHERS THEN
+        -- Log error but continue with other users
+        DBMS_OUTPUT.PUT_LINE('Error creating user ' || p_usernames(i) || ': ' || SQLERRM);
+    END;
+  END LOOP;
+  
+  COMMIT;
 END;
 /
 ```
 
-### 6. Verify the User Was Created
-
-After executing, verify the user creation with:
+## Example Usage
 
 ```sql
-SELECT username, account_status FROM dba_users WHERE username = 'NEW_USERNAME';
+-- Example: Create three users at once
+DECLARE
+  v_usernames SYS.ODCIVARCHAR2LIST := SYS.ODCIVARCHAR2LIST('USER1', 'USER2', 'USER3');
+  v_passwords SYS.ODCIVARCHAR2LIST;
+BEGIN
+  -- Enable output to see results
+  SET SERVEROUTPUT ON SIZE 1000000;
+  
+  -- Create multiple users
+  create_multiple_users(v_usernames, v_passwords);
+  
+  -- Display results
+  DBMS_OUTPUT.PUT_LINE('Created users with the following credentials:');
+  DBMS_OUTPUT.PUT_LINE('----------------------------------------');
+  FOR i IN 1..v_passwords.COUNT LOOP
+    DBMS_OUTPUT.PUT_LINE(v_passwords(i));
+  END LOOP;
+  DBMS_OUTPUT.PUT_LINE('----------------------------------------');
+  DBMS_OUTPUT.PUT_LINE('IMPORTANT: Store these credentials securely!');
+END;
+/
 ```
 
-### 7. Verify the Granted Privileges
+## Implementation Notes
 
-Verify that the required privileges were granted:
+1. Replace `[schema_name].[object_name]` with your actual schema and table names.
 
-```sql
-SELECT grantee, privilege, table_name 
-FROM dba_tab_privs 
-WHERE grantee = 'NEW_USERNAME' 
-AND table_name = 'ALS' 
-AND owner = 'ENTITYDEV';
-```
+2. The script requires:
+   - DBA privileges
+   - EXECUTE permission on DBMS_CRYPTO
+   - CREATE USER system privilege
+   - CREATE ROLE system privilege
 
-### 8. Optional: Document the New User
+3. Security considerations:
+   - Store generated passwords securely
+   - Consider implementing password expiration policies
+   - For production systems, consider additional security measures
 
-Record the newly created username and password in your secure credential management system, as this is the only time you'll see the generated password in plaintext.
+4. The users created will be able to:
+   - Connect to the database (CONNECT role)
+   - Perform SELECT, INSERT, DELETE operations on the specified table
+   - Store their own objects in the USERS tablespace
 
-## Troubleshooting Common Issues
-
-1. **ORA-01031: insufficient privileges**
-   - Ensure you're connected as SYSDBA or a user with administrative privileges.
-
-2. **ORA-00942: table or view does not exist**
-   - Verify the ENTITYDEV.ALS table exists and is accessible.
-
-3. **ORA-04063: procedure has errors**
-   - Check for compilation errors with:
-     ```sql
-     SHOW ERRORS PROCEDURE create_new_user;
-     ```
-
-4. **ORA-06550: line X, column Y: PLS-00201: identifier 'DBMS_CRYPTO' must be declared**
-   - Grant execute permissions on DBMS_CRYPTO:
-     ```sql
-     GRANT EXECUTE ON SYS.DBMS_CRYPTO TO your_dba_user;
-     ```
-
-5. **Password Not Visible**
-   - Ensure SERVEROUTPUT is set ON before executing the procedure.
-
-## Security Notes
-
-- Store the generated passwords securely
-- Consider implementing a more secure password policy if needed
-- This procedure creates users with simple privileges; adjust as necessary for your security requirements
-- Remember that user creation and privilege management are sensitive administrative functions
+5. This approach is compatible with:
+   - TOAD and other SQL clients
+   - Spring Boot applications using JDBC
+   - Any standard Oracle connection method
