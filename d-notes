@@ -1,18 +1,52 @@
-I can see the questions in the Notepad++ window, and here are the answers:
+# Technical Summary: Database Management and System Integration Challenges
 
-1. **Would we run setup_als_roles multiple times on the various objects?**
-   No, you don't need to run setup_als_roles multiple times for various objects. The procedure is designed to create the role only once and then grant permissions on specified tables. If you need to add permissions for additional tables, you should modify the procedure to handle multiple objects rather than running it multiple times.
+## User Creation and Role Management
+- The `setup_als_roles` procedure efficiently creates a role and assigns permissions once, avoiding redundant execution
+- Role-based approach allows dynamic expansion of table permissions after user creation via `GRANT` statements to the role
+- Regular ALS users lack sufficient privileges to execute `setup_als_roles`; requires DBA-level access
 
-2. **Are we able to increase the amount of tables assigned to the als_user_role after the user creation?**
-   Yes, absolutely. The role-based approach is specifically designed for this flexibility. After users are created, you can grant additional privileges to the als_user_role, and all users with that role will automatically receive those new permissions. This is one of the main advantages of using roles.
+## Data Naming Conventions and Extraction
+- Daily tables follow "four three" naming pattern
+- Weekly extracts dated by snapshot day (Sunday)
+- Extract dates in log load must match the extract date from source systems
+- E6 weekly files delivered at sprint end, month end, on Sundays
+- Issue with "330" files lacking proper naming conventions
+- Extract date should reflect the date of data extraction, not processing date
 
-3. **Can we run the setup_als_roles procedure from ALS user?**
-   No, the setup_als_roles procedure requires elevated privileges (CREATE ROLE, GRANT) that a standard ALS user would not have. This procedure should be run by a DBA or another user with administrative privileges. Regular users like those created through this process wouldn't have sufficient permissions to create roles or grant object privileges.
+## Exadata Infrastructure Issues
+- Connection problems due to full archive logs (Error 00257)
+- System frozen state affecting database operations
 
-To properly extend the role's permissions later, a DBA would need to execute:
+## Transaction Management Implementation
+- Added synchronization strategy to ensure sequential task execution with dependencies
+- Implemented proper exception handling with SL4J for detailed error logging
+- Transaction boundary controls ensure atomicity with automatic rollback mechanisms
+- JDK version compatibility enables these transaction control improvements
 
-```sql
-GRANT SELECT, INSERT, DELETE ON [new_schema].[new_table] TO als_user_role;
-```
+## Golden Gate Replication Strategy
+- Preferred method for schema replication over custom Java code
+- Proposed naming convention: `[schema_name]_legacy_replica` (e.g., `als_legacy_replica`)
+- Three target schemas identified: "als", "entity", and "dial" (correction: "entity" not needed)
+- Schema creation requires elevated permissions (Peter/Jordan/Christina)
+- Open questions about Goldengate's ability to replicate entire schema objects and special permission requirements
 
-This is much more efficient than granting permissions individually to each user.
+## UI Monitoring and Error Handling
+- UI-based job monitoring code has been baselined
+- Testing reveals issues with record management in log load during sequential job execution
+- Enhanced error logging planned to track individual job outcomes
+
+## Materialized Views and Recovery Strategy
+- Materialized views considered for snapshot rollback functionality
+- Conditional setup implemented for failure scenarios
+- Discussion needed about traditional transaction rollback options
+
+## Action Items
+1. Fix table naming conventions by end of day
+2. Send clear instructions on naming conventions to Ravi
+3. Compile and test UI-based monitoring approach
+4. Create new schema for Golden Gate replication to prevent overwriting
+5. Confirm permissions for Matthew to replicate schema
+6. Ask Matthew about Goldengate's full schema replication capabilities
+7. Create `als_legacy_replica` and `dial_legacy_replica` schemas
+
+This technical architecture addresses database user management, data synchronization, error handling, and system integration across legacy and modernized components.
