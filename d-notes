@@ -1,76 +1,18 @@
+I can see the questions in the Notepad++ window, and here are the answers:
 
+1. **Would we run setup_als_roles multiple times on the various objects?**
+   No, you don't need to run setup_als_roles multiple times for various objects. The procedure is designed to create the role only once and then grant permissions on specified tables. If you need to add permissions for additional tables, you should modify the procedure to handle multiple objects rather than running it multiple times.
+
+2. **Are we able to increase the amount of tables assigned to the als_user_role after the user creation?**
+   Yes, absolutely. The role-based approach is specifically designed for this flexibility. After users are created, you can grant additional privileges to the als_user_role, and all users with that role will automatically receive those new permissions. This is one of the main advantages of using roles.
+
+3. **Can we run the setup_als_roles procedure from ALS user?**
+   No, the setup_als_roles procedure requires elevated privileges (CREATE ROLE, GRANT) that a standard ALS user would not have. This procedure should be run by a DBA or another user with administrative privileges. Regular users like those created through this process wouldn't have sufficient permissions to create roles or grant object privileges.
+
+To properly extend the role's permissions later, a DBA would need to execute:
+
+```sql
+GRANT SELECT, INSERT, DELETE ON [new_schema].[new_table] TO als_user_role;
 ```
-Subject: Transaction Management Strategies for Long-Running Jobs - Recommendation
 
-Hi Diane,
-
-I wanted to share our proposed approach for improving transaction management in our long-running batch jobs (Daily and Weekly jobs like E5, E3, E8, etc.).
-
-After evaluating several options, we've decided to implement a "Staging Approach with Final Commit" strategy. Before I explain our choice, I'd like to summarize the options we considered:
-
-Transaction Management Options:
-
-1. Traditional Transaction Rollback (Current Approach)
-   - Pros: Simple, automatic cleanup, ensures data consistency
-   - Cons: Lost work for long-running processes, locks resources, all-or-nothing approach is inefficient
-
-2. Checkpoint-based Transaction Management
-   - Creates logical checkpoints within jobs where partial work is committed
-   - On failure, only rolls back to the last checkpoint
-   - Requires state tracking between checkpoints
-   - Good for jobs with natural breaking points
-
-3. Staging Approach with Final Commit (Our Recommended Approach)
-   - Stores processed data in memory or temporary tables
-   - Validates complete dataset before committing to permanent storage
-   - Only commits when everything is verified successful
-   - Requires sufficient memory or temporary storage space
-
-4. Compensation-based Approach
-   - Allows transactions to commit incrementally
-   - Maintains a log of actions for potential reversal
-   - Executes compensating transactions to undo previous work if errors occur
-   - Good for distributed systems where full rollback isn't practical
-
-5. Saga Pattern
-   - Breaks long-running jobs into a series of smaller transactions
-   - Each has a corresponding compensating transaction
-   - For failures, executes compensating transactions in reverse order
-   - Works well for complex business processes with multiple steps
-
-6. Outbox Pattern
-   - Commits changes to local "outbox" tables atomically with business operations
-   - Processes the outbox with a separate background job
-   - Ensures eventual consistency while maintaining transaction boundaries
-   - Good for systems that need to coordinate multiple resources
-
-Key Elements of Our Recommended Staging Approach:
-1. Data Processing in Memory/Temporary Storage:
-   - All job processing will first happen in-memory or in temporary tables
-   - The system will maintain the complete dataset in this staging area during processing
-   - This isolates changes from production data until verification is complete
-
-2. Validation Before Commitment:
-   - Once all processing is complete, a comprehensive validation of the processed data occurs
-   - This ensures data integrity before any permanent changes are made
-   - Failed validations prevent any data from being committed
-
-3. Single Atomic Commit:
-   - Only after successful validation does the system perform a single transaction to commit all changes
-   - This maintains atomicity while avoiding long-running transactions that lock resources
-
-Benefits for Our System:
-- Reduces database locking during long-running processes
-- Provides better error recovery without losing work
-- Enables comprehensive validation before committing data
-- Improves performance by batching database operations
-- Simplifies rollback scenarios (just discard the staging data)
-
-Implementation Timeline:
-We're currently updating our Daily Jobs with this approach and testing the implementation. We'll extend the same pattern to Weekly jobs once we've verified the effectiveness of this approach.
-
-Let me know if you'd like to discuss this further or if you prefer we consider one of the other approaches for our specific use case.
-
-Best regards,
-Isiam
-```
+This is much more efficient than granting permissions individually to each user.
