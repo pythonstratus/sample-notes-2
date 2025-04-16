@@ -1,137 +1,205 @@
-After reviewing the notes on roles and permissions, I can suggest several improvements to your Oracle user creation script:
+# Oracle User and Role Management System
 
-## Suggested Script Improvements
+A comprehensive solution for Oracle DBAs to manage users, roles, and permissions efficiently.
 
-1. **Incorporate Multiple Role Types**
-   - Modify the script to support creating different role types (user, developer, admin) based on user needs:
-   ```sql
-   CREATE OR REPLACE PROCEDURE setup_roles (
-     p_role_type IN VARCHAR2  -- 'USER', 'DEVELOPER', 'ADMIN'
-   ) IS
-     v_role_name VARCHAR2(30);
-   BEGIN
-     v_role_name := CASE 
-       WHEN p_role_type = 'USER' THEN 'als_user_role'
-       WHEN p_role_type = 'DEVELOPER' THEN 'als_developer_role'
-       WHEN p_role_type = 'ADMIN' THEN 'als_admin_role'
-       ELSE 'als_user_role'
-     END;
-     
-     -- Create role if it doesn't exist
-     BEGIN
-       EXECUTE IMMEDIATE 'CREATE ROLE ' || v_role_name;
-     EXCEPTION
-       WHEN OTHERS THEN
-         IF SQLCODE = -955 THEN NULL; -- Role already exists
-         ELSE RAISE;
-         END IF;
-     END;
-     
-     -- Grant appropriate permissions based on role type
-     CASE p_role_type
-       WHEN 'USER' THEN
-         EXECUTE IMMEDIATE 'GRANT SELECT ON [schema_name].[object_name] TO ' || v_role_name;
-       WHEN 'DEVELOPER' THEN
-         EXECUTE IMMEDIATE 'GRANT SELECT, INSERT, DELETE ON [schema_name].[object_name] TO ' || v_role_name;
-       WHEN 'ADMIN' THEN
-         EXECUTE IMMEDIATE 'GRANT SELECT, INSERT, UPDATE, DELETE ON [schema_name].[object_name] TO ' || v_role_name;
-         EXECUTE IMMEDIATE 'GRANT CREATE TABLE, CREATE VIEW, CREATE TYPE TO ' || v_role_name;
-     END CASE;
-   END;
-   /
+## Overview
+
+This package provides a complete set of procedures for creating and managing Oracle database users with role-based access control. It addresses the common challenges of user provisioning while maintaining security best practices.
+
+Key features:
+- Creation of predefined roles (User, Developer, Admin) with appropriate permissions
+- MD5 password generation for enhanced security
+- Batch user creation for efficient onboarding
+- Granular table permission management
+- Test mode for script validation
+- Change request documentation generation
+
+## Components
+
+The system consists of several integrated procedures:
+
+1. **setup_roles** - Creates and configures role types with appropriate permissions
+2. **grant_tables_to_role** - Assigns table permissions to roles
+3. **create_multiple_users** - Creates users with MD5 hashed passwords and assigns roles
+4. **generate_change_doc** - Creates documentation for change requests
+5. **run_complete_example** - Demonstrates the full workflow with a test mode option
+
+## Roles and Permissions
+
+The system supports three predefined role types:
+
+| Role Type  | Permissions                                         | Typical Users             |
+|------------|----------------------------------------------------|-----------------------------|
+| USER       | SELECT                                             | Testers, Analysts           |
+| DEVELOPER  | SELECT, INSERT, DELETE                             | Developers, Data Engineers  |
+| ADMIN      | SELECT, INSERT, UPDATE, DELETE, CREATE objects     | DBAs, Lead Developers       |
+
+## Prerequisites
+
+- Oracle Database 11g or higher
+- DBA privileges or at least:
+  - CREATE USER system privilege
+  - CREATE ROLE system privilege
+  - EXECUTE on DBMS_CRYPTO
+  - Ability to grant object privileges
+
+## Installation
+
+1. Connect to your Oracle database as a DBA or privileged user:
+   ```
+   sqlplus username/password@database AS SYSDBA
    ```
 
-2. **Handle Table Lists Dynamically**
-   - Add capability to process multiple tables from a list:
-   ```sql
-   CREATE OR REPLACE PROCEDURE grant_tables_to_role (
-     p_role_name IN VARCHAR2,
-     p_table_list IN SYS.ODCIVARCHAR2LIST,
-     p_privs IN VARCHAR2  -- 'SELECT' or 'SELECT,INSERT,DELETE', etc.
-   ) IS
-   BEGIN
-     FOR i IN 1..p_table_list.COUNT LOOP
-       BEGIN
-         EXECUTE IMMEDIATE 'GRANT ' || p_privs || ' ON ' || p_table_list(i) || ' TO ' || p_role_name;
-         DBMS_OUTPUT.PUT_LINE('Granted ' || p_privs || ' on ' || p_table_list(i) || ' to ' || p_role_name);
-       EXCEPTION
-         WHEN OTHERS THEN
-           DBMS_OUTPUT.PUT_LINE('Error granting privileges on ' || p_table_list(i) || ': ' || SQLERRM);
-       END;
-     END LOOP;
-   END;
-   /
+2. Run the script file containing all procedures:
+   ```
+   @oracle_user_management.sql
    ```
 
-3. **Improve User Creation with Role Assignment**
-   - Modify the user creation procedure to assign appropriate roles:
+3. Verify installation:
    ```sql
-   CREATE OR REPLACE PROCEDURE create_multiple_users (
-     p_usernames IN SYS.ODCIVARCHAR2LIST,
-     p_role_type IN VARCHAR2,  -- 'USER', 'DEVELOPER', 'ADMIN'
-     p_return_passwords OUT SYS.ODCIVARCHAR2LIST
-   ) AUTHID CURRENT_USER IS
-     v_random_str VARCHAR2(100);
-     v_password VARCHAR2(100);
-     v_hash_raw RAW(16);
-     v_hash_hex VARCHAR2(32);
-     v_role_name VARCHAR2(30);
-   BEGIN
-     -- Determine role name based on role type
-     v_role_name := CASE 
-       WHEN p_role_type = 'USER' THEN 'als_user_role'
-       WHEN p_role_type = 'DEVELOPER' THEN 'als_developer_role'
-       WHEN p_role_type = 'ADMIN' THEN 'als_admin_role'
-       ELSE 'als_user_role'
-     END;
-     
-     -- Ensure the role exists
-     setup_roles(p_role_type);
-     
-     -- Rest of user creation logic...
-     -- ...
-     
-     -- Grant the appropriate role
-     EXECUTE IMMEDIATE 'GRANT ' || v_role_name || ' TO ' || DBMS_ASSERT.ENQUOTE_NAME(p_usernames(i));
-     
-     -- ...
-   END;
-   /
+   SELECT OBJECT_NAME, STATUS FROM USER_OBJECTS 
+   WHERE OBJECT_TYPE = 'PROCEDURE' 
+   AND OBJECT_NAME IN ('SETUP_ROLES', 'GRANT_TABLES_TO_ROLE', 'CREATE_MULTIPLE_USERS', 
+                       'GENERATE_CHANGE_DOC', 'RUN_COMPLETE_EXAMPLE');
    ```
 
-4. **Add Documentation Generation**
-   - Create a procedure to generate documentation for change requests:
-   ```sql
-   CREATE OR REPLACE PROCEDURE generate_change_doc (
-     p_usernames IN SYS.ODCIVARCHAR2LIST,
-     p_role_type IN VARCHAR2
-   ) IS
-   BEGIN
-     DBMS_OUTPUT.PUT_LINE('Change Request Documentation');
-     DBMS_OUTPUT.PUT_LINE('---------------------------');
-     DBMS_OUTPUT.PUT_LINE('Users to be created: ' || p_usernames.COUNT);
-     FOR i IN 1..p_usernames.COUNT LOOP
-       DBMS_OUTPUT.PUT_LINE('- ' || p_usernames(i));
-     END LOOP;
-     DBMS_OUTPUT.PUT_LINE('Role to be assigned: ' || p_role_type);
-     DBMS_OUTPUT.PUT_LINE('---------------------------');
-   END;
-   /
-   ```
+## Usage Examples
 
-5. **Test Mode for Script Validation**
-   - Add a test mode parameter to validate without executing:
-   ```sql
-   -- Add to your main procedure
-   p_test_only IN BOOLEAN DEFAULT FALSE
-   
-   -- Then use conditionals
-   IF NOT p_test_only THEN
-     -- Execute the actual creation
-   ELSE
-     -- Just output what would happen
-     DBMS_OUTPUT.PUT_LINE('Would create user: ' || p_usernames(i));
-   END IF;
-   ```
+### Basic Example - Create Users with Developer Role
 
-These improvements address the specific needs mentioned in your notes while maintaining the core functionality of your original script. The changes provide more flexibility, better role management, and documentation to help with the change request process that Christina requires.
+```sql
+DECLARE
+  v_usernames SYS.ODCIVARCHAR2LIST := SYS.ODCIVARCHAR2LIST('DEV_USER1', 'DEV_USER2');
+  v_passwords SYS.ODCIVARCHAR2LIST;
+BEGIN
+  -- Enable output to see results
+  SET SERVEROUTPUT ON SIZE 1000000;
+  
+  -- Create users with DEVELOPER role
+  create_multiple_users(v_usernames, 'DEVELOPER', v_passwords);
+  
+  -- Display the generated credentials
+  FOR i IN 1..v_passwords.COUNT LOOP
+    DBMS_OUTPUT.PUT_LINE(v_passwords(i));
+  END LOOP;
+END;
+/
+```
+
+### Grant Tables to Existing Role
+
+```sql
+DECLARE
+  v_tables SYS.ODCIVARCHAR2LIST := SYS.ODCIVARCHAR2LIST(
+    'SCHEMA1.TABLE1',
+    'SCHEMA1.TABLE2',
+    'SCHEMA2.TABLE3'
+  );
+BEGIN
+  -- Enable output
+  SET SERVEROUTPUT ON SIZE 1000000;
+  
+  -- Grant SELECT, INSERT, DELETE to Developer role
+  grant_tables_to_role('als_developer_role', v_tables, 'SELECT, INSERT, DELETE');
+END;
+/
+```
+
+### Generate Change Request Documentation
+
+```sql
+DECLARE
+  v_usernames SYS.ODCIVARCHAR2LIST := SYS.ODCIVARCHAR2LIST('ANALYST1', 'ANALYST2');
+  v_tables SYS.ODCIVARCHAR2LIST := SYS.ODCIVARCHAR2LIST(
+    'SCHEMA1.REPORT_TABLE',
+    'SCHEMA1.METRIC_TABLE'
+  );
+BEGIN
+  -- Enable output
+  SET SERVEROUTPUT ON SIZE 1000000;
+  
+  -- Generate documentation for USER role
+  generate_change_doc(v_usernames, 'USER', v_tables);
+END;
+/
+```
+
+### Complete Workflow with Test Mode
+
+```sql
+BEGIN
+  -- Run in test mode first (TRUE)
+  run_complete_example(TRUE);
+  
+  -- When ready to execute for real, change to FALSE
+  -- run_complete_example(FALSE);
+END;
+/
+```
+
+## Customization
+
+### Adding New Role Types
+
+To add a new role type (e.g., 'ANALYST'):
+
+1. Modify the CASE statements in the `setup_roles` procedure
+2. Add the new role type and its privileges
+3. Update the CASE statements in other procedures that reference role types
+
+### Tailoring Permission Sets
+
+Adjust the privileges granted to each role in the `setup_roles` procedure to match your organization's security requirements.
+
+## Security Considerations
+
+- Always run in test mode first before executing in production
+- Store generated passwords securely
+- Consider implementing password expiration policies
+- For production systems, consider additional security measures
+- The scripts use DBMS_ASSERT to prevent SQL injection
+
+## Troubleshooting
+
+### Common Issues
+
+1. **ORA-01031: insufficient privileges**
+   - Ensure you're connected as SYSDBA or a user with administrative privileges
+
+2. **ORA-00942: table or view does not exist**
+   - Verify the tables exist and are accessible to the executing user
+
+3. **ORA-04063: procedure has errors**
+   - Check for compilation errors with:
+     ```sql
+     SHOW ERRORS PROCEDURE procedure_name;
+     ```
+
+4. **ORA-06550: line X, column Y: PLS-00201: identifier 'DBMS_CRYPTO' must be declared**
+   - Grant execute permissions on DBMS_CRYPTO:
+     ```sql
+     GRANT EXECUTE ON SYS.DBMS_CRYPTO TO your_dba_user;
+     ```
+
+### Error Logging
+
+Each procedure includes error handling that will output information about any issues encountered. Enable SERVEROUTPUT to see these messages:
+
+```sql
+SET SERVEROUTPUT ON SIZE 1000000;
+```
+
+## Best Practices
+
+1. Use test mode (`p_test_only => TRUE`) to validate changes before execution
+2. Generate change documentation for audit purposes
+3. Use role-based permissions instead of direct grants to users
+4. Keep a record of all created users and their roles
+5. Periodically review and audit role permissions
+
+## Notes for DBAs
+
+- The procedures in this package require elevated privileges and should only be executed by authorized DBAs
+- Changes to role permissions will affect all users assigned to that role
+- Consider using this script as part of a broader user management strategy
+- Integration with LDAP or SSO may require additional customization
