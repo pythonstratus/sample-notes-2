@@ -6,13 +6,13 @@ import gov.irs.sbse.os.ts.csp.alsentity.ale.service.DatabaseSnapshotService;
 import gov.irs.sbse.os.ts.csp.alsentity.ale.service.LogLoadService;
 import gov.irs.sbse.os.ts.csp.alsentity.ale.service.MaterializedViewService;
 import gov.irs.sbse.os.ts.csp.alsentity.ale.repository.EntityRepository;
-import gov.irs.sbse.os.ts.csp.alsentity.ale.integrationTestUtil;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.ComponentScan;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.util.Arrays;
 import java.util.List;
@@ -45,6 +45,9 @@ public class WeeklyJobRunner implements CommandLineRunner {
     @Autowired
     private LogLoadService logLoadService;
     
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+    
     // Default prior snapshot date
     private String priorSnapshotDate = "03282023";
 
@@ -76,7 +79,7 @@ public class WeeklyJobRunner implements CommandLineRunner {
             log.info("Processing job: " + jobCode);
             
             try {
-                integrationTestUtil.builder(entityRepos, dbSnapshotService, materializedViewService)
+                JobExecutionUtil.builder(entityRepos, dbSnapshotService, materializedViewService, jdbcTemplate)
                     .forJob(jobCode)
                     .forTables(tables)
                     .forPrefix(Constants.WEEKLY)
