@@ -1,11 +1,11 @@
-package gov.irs.sbse.os.ts.csp.alsentity.ale.util;
+package com.abc.sbse.os.ts.csp.alsentity.ale.util;
 
-import gov.irs.sbse.os.ts.csp.alsentity.ale.Constants;
-import gov.irs.sbse.os.ts.csp.alsentity.ale.service.BatchRunJobService;
-import gov.irs.sbse.os.ts.csp.alsentity.ale.service.DatabaseSnapshotService;
-import gov.irs.sbse.os.ts.csp.alsentity.ale.service.LogLoadService;
-import gov.irs.sbse.os.ts.csp.alsentity.ale.service.MaterializedViewService;
-import gov.irs.sbse.os.ts.csp.alsentity.ale.repository.EntityRepository;
+import com.abc.sbse.os.ts.csp.alsentity.ale.Constants;
+import com.abc.sbse.os.ts.csp.alsentity.ale.service.BatchRunJobService;
+import com.abc.sbse.os.ts.csp.alsentity.ale.service.DatabaseSnapshotService;
+import com.abc.sbse.os.ts.csp.alsentity.ale.service.LogLoadService;
+import com.abc.sbse.os.ts.csp.alsentity.ale.service.MaterializedViewService;
+import com.abc.sbse.os.ts.csp.alsentity.ale.repository.EntityRepository;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.CommandLineRunner;
@@ -25,7 +25,7 @@ import java.util.logging.Logger;
  * This class leverages existing functionality but packages it as an executable JAR
  */
 @SpringBootApplication
-@ComponentScan(basePackages = "gov.irs.sbse.os.ts.csp.alsentity.ale")
+@ComponentScan(basePackages = "com.abc.sbse.os.ts.csp.alsentity.ale")
 public class WeeklyJobRunner implements CommandLineRunner {
 
     private static final Logger log = Logger.getLogger(WeeklyJobRunner.class.getName());
@@ -92,7 +92,11 @@ public class WeeklyJobRunner implements CommandLineRunner {
                                     CompletableFuture<Void> s1Future = CompletableFuture.runAsync(() -> {
                                         try {
                                             log.info("Executing S1 job...");
-                                            int recordCount = batchRunJobService.runS1Job();
+                                            batchRunJobService.runS1Job();
+                                            
+                                            // Get record count after job execution
+                                            int recordCount = getRecordCountForJob(jobCode);
+                                            
                                             // Log job execution to LOGLOAD table
                                             logLoadService.saveLogLoad(jobCode, priorSnapshotDate, recordCount);
                                         } catch (Exception e) {
@@ -107,7 +111,11 @@ public class WeeklyJobRunner implements CommandLineRunner {
                                     CompletableFuture<Void> e1Future = CompletableFuture.runAsync(() -> {
                                         try {
                                             log.info("Executing E1 job...");
-                                            int recordCount = batchRunJobService.runE1Job();
+                                            batchRunJobService.runE1Job();
+                                            
+                                            // Get record count after job execution
+                                            int recordCount = getRecordCountForJob(jobCode);
+                                            
                                             // Log job execution to LOGLOAD table
                                             logLoadService.saveLogLoad(jobCode, priorSnapshotDate, recordCount);
                                         } catch (Exception e) {
@@ -122,7 +130,11 @@ public class WeeklyJobRunner implements CommandLineRunner {
                                     CompletableFuture<Void> e2Future = CompletableFuture.runAsync(() -> {
                                         try {
                                             log.info("Executing E2 job...");
-                                            int recordCount = batchRunJobService.runE2Job();
+                                            batchRunJobService.runE2Job();
+                                            
+                                            // Get record count after job execution
+                                            int recordCount = getRecordCountForJob(jobCode);
+                                            
                                             // Log job execution to LOGLOAD table
                                             logLoadService.saveLogLoad(jobCode, priorSnapshotDate, recordCount);
                                         } catch (Exception e) {
@@ -137,7 +149,11 @@ public class WeeklyJobRunner implements CommandLineRunner {
                                     CompletableFuture<Void> e3Future = CompletableFuture.runAsync(() -> {
                                         try {
                                             log.info("Executing E3 job for weekly run...");
-                                            int recordCount = batchRunJobService.runE3Job(false);
+                                            batchRunJobService.runE3Job(false);
+                                            
+                                            // Get record count after job execution
+                                            int recordCount = getRecordCountForJob(jobCode);
+                                            
                                             // Log job execution to LOGLOAD table
                                             logLoadService.saveLogLoad(jobCode, priorSnapshotDate, recordCount);
                                         } catch (Exception e) {
@@ -152,7 +168,11 @@ public class WeeklyJobRunner implements CommandLineRunner {
                                     CompletableFuture<Void> e4Future = CompletableFuture.runAsync(() -> {
                                         try {
                                             log.info("Executing E4 job...");
-                                            int recordCount = batchRunJobService.runE4Job();
+                                            batchRunJobService.runE4Job();
+                                            
+                                            // Get record count after job execution
+                                            int recordCount = getRecordCountForJob(jobCode);
+                                            
                                             // Log job execution to LOGLOAD table
                                             logLoadService.saveLogLoad(jobCode, priorSnapshotDate, recordCount);
                                         } catch (Exception e) {
@@ -167,7 +187,11 @@ public class WeeklyJobRunner implements CommandLineRunner {
                                     CompletableFuture<Void> eaFuture = CompletableFuture.runAsync(() -> {
                                         try {
                                             log.info("Executing EA job...");
-                                            int recordCount = batchRunJobService.runEAJob();
+                                            batchRunJobService.runEAJob();
+                                            
+                                            // Get record count after job execution
+                                            int recordCount = getRecordCountForJob(jobCode);
+                                            
                                             // Log job execution to LOGLOAD table
                                             logLoadService.saveLogLoad(jobCode, priorSnapshotDate, recordCount);
                                         } catch (Exception e) {
@@ -182,7 +206,11 @@ public class WeeklyJobRunner implements CommandLineRunner {
                                     CompletableFuture<Void> e9Future = CompletableFuture.runAsync(() -> {
                                         try {
                                             log.info("Executing E9 job...");
-                                            int recordCount = batchRunJobService.runE9Job();
+                                            batchRunJobService.runE9Job();
+                                            
+                                            // Get record count after job execution
+                                            int recordCount = getRecordCountForJob(jobCode);
+                                            
                                             // Log job execution to LOGLOAD table
                                             logLoadService.saveLogLoad(jobCode, priorSnapshotDate, recordCount);
                                         } catch (Exception e) {
@@ -212,5 +240,60 @@ public class WeeklyJobRunner implements CommandLineRunner {
         }
         
         log.info("All weekly jobs completed");
+    }
+    
+    /**
+     * Gets the record count for a specific job by querying the appropriate table
+     * 
+     * @param jobCode the job code (e.g., "S1", "E1", etc.)
+     * @return the record count for the job, or 0 if it couldn't be determined
+     */
+    private int getRecordCountForJob(String jobCode) {
+        try {
+            // Determine which table to query based on job code
+            String tableName = getTableNameForWeeklyJobCode(jobCode);
+            if (tableName == null || tableName.isEmpty()) {
+                log.warning("Could not determine table name for job code: " + jobCode);
+                return 0;
+            }
+            
+            // Execute a count query on the appropriate table
+            String sql = "SELECT COUNT(*) FROM " + tableName;
+            Integer count = jdbcTemplate.queryForObject(sql, Integer.class);
+            
+            return count != null ? count : 0;
+        } catch (Exception e) {
+            log.warning("Error getting record count for job " + jobCode + ": " + e.getMessage());
+            // Return a default value in case of error
+            return 0;
+        }
+    }
+
+    /**
+     * Maps weekly job codes to their primary table names for counting records
+     * 
+     * @param jobCode the job code
+     * @return the name of the table to query for record count
+     */
+    private String getTableNameForWeeklyJobCode(String jobCode) {
+        switch (jobCode) {
+            case "S1":
+                return "S1_RECORDS"; // Replace with actual table name
+            case "E1":
+                return "E1_RECORDS"; // Replace with actual table name
+            case "E2":
+                return "E2_RECORDS"; // Replace with actual table name
+            case "E3":
+                return "E3_RECORDS"; // Replace with actual table name for weekly E3 run
+            case "E4":
+                return "E4_RECORDS"; // Replace with actual table name
+            case "EA":
+                return "EA_RECORDS"; // Replace with actual table name
+            case "E9":
+                return "E9_RECORDS"; // Replace with actual table name
+            default:
+                log.warning("Unknown weekly job code: " + jobCode);
+                return "";
+        }
     }
 }
