@@ -1,11 +1,11 @@
-package gov.irs.sbse.os.ts.csp.alsentity.ale.util;
+package com.abc.sbse.os.ts.csp.alsentity.ale.util;
 
-import gov.irs.sbse.os.ts.csp.alsentity.ale.Constants;
-import gov.irs.sbse.os.ts.csp.alsentity.ale.service.BatchRunJobService;
-import gov.irs.sbse.os.ts.csp.alsentity.ale.service.DatabaseSnapshotService;
-import gov.irs.sbse.os.ts.csp.alsentity.ale.service.LogLoadService;
-import gov.irs.sbse.os.ts.csp.alsentity.ale.service.MaterializedViewService;
-import gov.irs.sbse.os.ts.csp.alsentity.ale.repository.EntityRepository;
+import com.abc.sbse.os.ts.csp.alsentity.ale.Constants;
+import com.abc.sbse.os.ts.csp.alsentity.ale.service.BatchRunJobService;
+import com.abc.sbse.os.ts.csp.alsentity.ale.service.DatabaseSnapshotService;
+import com.abc.sbse.os.ts.csp.alsentity.ale.service.LogLoadService;
+import com.abc.sbse.os.ts.csp.alsentity.ale.service.MaterializedViewService;
+import com.abc.sbse.os.ts.csp.alsentity.ale.repository.EntityRepository;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.CommandLineRunner;
@@ -25,7 +25,7 @@ import java.util.logging.Logger;
  * This class leverages existing functionality but packages it as an executable JAR
  */
 @SpringBootApplication
-@ComponentScan(basePackages = "gov.irs.sbse.os.ts.csp.alsentity.ale")
+@ComponentScan(basePackages = "com.abc.sbse.os.ts.csp.alsentity.ale")
 public class DailyJobRunner implements CommandLineRunner {
 
     private static final Logger log = Logger.getLogger(DailyJobRunner.class.getName());
