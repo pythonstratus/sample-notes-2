@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" 
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    
+    <!-- Your existing parent, groupId, artifactId, version, etc. -->
+    
+    <build>
+        <plugins>
+            <!-- Other plugins you might have -->
+            
+            <!-- Spring Boot Maven plugin for creating executable jars -->
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <executions>
+                    <!-- Daily Jobs Runner -->
+                    <execution>
+                        <id>daily-job-runner</id>
+                        <goals>
+                            <goal>repackage</goal>
+                        </goals>
+                        <configuration>
+                            <classifier>daily</classifier>
+                            <mainClass>gov.irs.sbse.os.ts.csp.alsentity.ale.util.DailyJobRunner</mainClass>
+                        </configuration>
+                    </execution>
+                    
+                    <!-- Weekly Jobs Runner -->
+                    <execution>
+                        <id>weekly-job-runner</id>
+                        <goals>
+                            <goal>repackage</goal>
+                        </goals>
+                        <configuration>
+                            <classifier>weekly</classifier>
+                            <mainClass>gov.irs.sbse.os.ts.csp.alsentity.ale.util.WeeklyJobRunner</mainClass>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>
