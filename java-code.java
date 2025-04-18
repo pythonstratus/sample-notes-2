@@ -1,31 +1,41 @@
-// Add this field to your DailyIntegrationTest class
-@Autowired
-private JdbcTemplate jdbcTemplate;
-
-// Add this method to your test class
 private void insertLogLoadRecord(String jobCode, String extractDate, int recordCount) {
     try {
-        // Format current date as MMddyyyy for LOADDT
-        String currentDate = new SimpleDateFormat("MMddyyyy").format(new Date());
+        // Create a properly formatted date for Oracle
+        // Oracle expects dates in a specific format, typically 'YYYY-MM-DD'
+        // If extractDate is already in 'MMddyyyy' format, convert it to Oracle's expected format
+        java.sql.Date sqlExtractDate;
+        try {
+            SimpleDateFormat inputFormat = new SimpleDateFormat("MMddyyyy");
+            SimpleDateFormat oracleFormat = new SimpleDateFormat("yyyy-MM-dd");
+            Date parsedDate = inputFormat.parse(extractDate);
+            String formattedExtractDate = oracleFormat.format(parsedDate);
+            sqlExtractDate = java.sql.Date.valueOf(formattedExtractDate);
+        } catch (ParseException e) {
+            // If parsing fails, use current date as fallback
+            sqlExtractDate = new java.sql.Date(System.currentTimeMillis());
+            log.warn("Failed to parse extract date: " + extractDate + ", using current date");
+        }
         
-        // Get current username for UNIX field
+        // Current date in SQL format
+        java.sql.Date sqlLoadDate = new java.sql.Date(System.currentTimeMillis());
+        
+        // Get username
         String username = System.getProperty("user.name");
         if (username == null || username.isEmpty()) {
             username = "SYSTEM";
         }
         
-        // SQL to insert a new record
+        // SQL to insert a new record using proper date format for Oracle
         String sql = "INSERT INTO LOGLOAD (LOADNAME, EXTDT, LOADDT, UNIX, NUMREC) VALUES (?, ?, ?, ?, ?)";
         
-        // Execute insert
+        // Execute insert with properly formatted dates
         jdbcTemplate.update(sql, 
             jobCode, 
-            extractDate, 
-            currentDate, 
+            sqlExtractDate,  // Use SQL Date object 
+            sqlLoadDate,     // Use SQL Date object
             username, 
             recordCount);
             
-        // Log the successful insert
         log.info("Successfully inserted LOGLOAD record for job " + jobCode + " with count " + recordCount);
         
     } catch (Exception e) {
@@ -33,24 +43,3 @@ private void insertLogLoadRecord(String jobCode, String extractDate, int recordC
         e.printStackTrace();
     }
 }
-
-
-case "E5":
-    CompletableFuture<Void> e5Future = CompletableFuture.runAsync(() -> {
-        try {
-            batchRunJobService.runE5Job();
-            
-            // Query E5-specific tables to get record count
-            Integer recordCount = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM ENTEMP", Integer.class);
-            
-            // Insert record using our custom method
-            insertLogLoadRecord("E5", priorSnapshotDate, recordCount != null ? recordCount : 0);
-            
-        } catch (Exception e) {
-            log.warn("Error executing E5 job: " + e.getMessage());
-            e.printStackTrace();
-            throw new RuntimeException("E5 job execution failed", e);
-        }
-    });
-    e5Future.join();
-    break;
