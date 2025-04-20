@@ -2,15 +2,23 @@
 if ("CFF".equalsIgnoreCase(srcTable)) {
     try {
         log.info("Forcing DROP TABLE for CFF before creation attempt");
-        Statement stmt = conn.createStatement();
-        // Try direct drop - it will fail if table doesn't exist but that's OK
+        String dropSQL = "DROP TABLE CFF";
+        PreparedStatement ps = null;
         try {
-            stmt.executeUpdate("DROP TABLE CFF");
+            ps = conn.prepareStatement(dropSQL);
+            ps.executeUpdate();
             log.info("Successfully dropped existing CFF table");
         } catch (SQLException dropEx) {
             log.info("Drop table failed (likely table doesn't exist): " + dropEx.getMessage());
+        } finally {
+            if (ps != null) {
+                try {
+                    ps.close();
+                } catch (SQLException e) {
+                    log.error("Error closing prepared statement: " + e.getMessage());
+                }
+            }
         }
-        stmt.close();
         // Important - make sure the drop is committed
         conn.commit();
     } catch (Exception e) {
