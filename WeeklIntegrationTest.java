@@ -1,45 +1,45 @@
 @Test
 // @Disabled
 public void testRestoreAndLaunchAllWeeklyJobsSequentially() {
-    List<String> jobCodes = new ArrayList<>(Constants.WEEKLY_JOB_CODES);
+    // Start with an empty completable future
+    CompletableFuture<Void> jobChain = CompletableFuture.completedFuture(null);
     
-    // Create individual CompletableFutures for each job
-    CompletableFuture<Void> previousJob = CompletableFuture.completedFuture(null);
-    
-    for (String jobCode : jobCodes) {
-        // Create a CompletableFuture for each job
-        CompletableFuture<Void> currentJob = previousJob.thenRunAsync(() -> {
-            List<String> tables = Constants.WEEKLY_JOB_TABLES.get(jobCode);
-            
-            try {
-                // Set up and execute the job
-                IntegrationTestUtil.builder(entityRepos, dbSnapshotService, materializedViewService)
-                    .forJob(jobCode)
-                    .forTables(tables)
-                    .forPrefix(Constants.WEEKLY)
-                    .withPriorSnapshotDate(priorSnapshotDate)
-                    .execute();
-                
-                runJobByCode(jobCode);
-            } catch (Exception e) {
-                throw new CompletionException("Job launch for job code " + jobCode + " failed", e);
-            }
-        });
+    for (String jobCode : Constants.WEEKLY_JOB_CODES) {
+        // Create a new stage in the chain for each job
+        final String currentJobCode = jobCode;
         
-        // Update previous job for next iteration
-        previousJob = currentJob;
+        jobChain = jobChain.thenCompose(ignored -> {
+            return CompletableFuture.runAsync(() -> {
+                List<String> tables = Constants.WEEKLY_JOB_TABLES.get(currentJobCode);
+                
+                try {
+                    // Setup the job environment
+                    IntegrationTestUtil.builder(entityRepos, dbSnapshotService, materializedViewService)
+                        .forJob(currentJobCode)
+                        .forTables(tables)
+                        .forPrefix(Constants.WEEKLY)
+                        .withPriorSnapshotDate(priorSnapshotDate)
+                        .execute();
+                    
+                    // Run the specific job
+                    executeJobByCode(currentJobCode);
+                } catch (Exception e) {
+                    throw new CompletionException("Job launch for job code " + currentJobCode + " failed", e);
+                }
+            });
+        });
     }
     
-    // Wait for the last job to complete
+    // Wait for all jobs to complete
     try {
-        previousJob.join();
+        jobChain.join();
     } catch (CompletionException e) {
         fail("Job execution failed: " + e.getMessage());
     }
 }
 
-// Helper method to run the job based on job code
-private void runJobByCode(String jobCode) {
+// Helper method to run jobs with exception handling
+private void executeJobByCode(String jobCode) throws Exception {
     switch (jobCode) {
         case "S1":
             batchRunJobService.runS1Job();
