@@ -5,29 +5,39 @@ public CommandLineRunner commandLineRunner(
         ApplicationArguments args) {
     
     return runner -> {
+        // Store the date from command line, if present
+        String dateParam = null;
+        if (args.getOptionNames().contains("priorSnapshotDate")) {
+            List<String> values = args.getOptionValues("priorSnapshotDate");
+            if (values != null && !values.isEmpty()) {
+                dateParam = values.get(0);
+                log.warn("Using prior snapshot date from command line: " + dateParam);
+            }
+        }
+        
         if (args.getOptionNames().contains("runMode")) {
             String runMode = args.getOptionValues("runMode").get(0);
             
+            // Pass the date directly to the methods
             switch (runMode.toLowerCase()) {
                 case "daily":
-                    System.out.println("Running daily integration jobs...");
-                    dailyRunner.runAllDailyJobs();
+                    log.warn("Running daily integration jobs...");
+                    dailyRunner.runAllDailyJobs(dateParam);  // Pass date directly
                     break;
                 case "weekly":
-                    System.out.println("Running weekly integration jobs...");
-                    weeklyRunner.runAllWeeklyJobs();
+                    log.warn("Running weekly integration jobs...");
+                    weeklyRunner.runAllWeeklyJobs(dateParam);  // Pass date directly
                     break;
                 case "e5":
-                    System.out.println("Running E5 job only...");
-                    dailyRunner.runE5Job();
+                    log.warn("Running E5 job only...");
+                    dailyRunner.runE5Job(dateParam);  // Pass date directly
                     break;
-                // Add more specific job cases as needed
                 default:
-                    System.out.println("Unknown run mode: " + runMode);
-                    System.out.println("Available modes: daily, weekly, e5");
+                    log.warn("Unknown run mode: " + runMode);
+                    log.warn("Available modes: daily, weekly, e5");
             }
         } else {
-            System.out.println("No run mode specified. Please use --runMode=daily or --runMode=weekly");
+            log.warn("No run mode specified. Please use --runMode=daily or --runMode=weekly");
         }
     };
 }
