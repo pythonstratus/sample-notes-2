@@ -1,0 +1,19 @@
+// Special handling for CFF table - use a direct DROP attempt
+if ("CFF".equalsIgnoreCase(srcTable)) {
+    try {
+        log.info("Forcing DROP TABLE for CFF before creation attempt");
+        Statement stmt = conn.createStatement();
+        // Try direct drop - it will fail if table doesn't exist but that's OK
+        try {
+            stmt.executeUpdate("DROP TABLE CFF");
+            log.info("Successfully dropped existing CFF table");
+        } catch (SQLException dropEx) {
+            log.info("Drop table failed (likely table doesn't exist): " + dropEx.getMessage());
+        }
+        stmt.close();
+        // Important - make sure the drop is committed
+        conn.commit();
+    } catch (Exception e) {
+        log.error("Error in CFF special handling: " + e.getMessage(), e);
+    }
+}
