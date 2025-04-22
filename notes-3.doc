@@ -1,0 +1,415 @@
+# Spring Boot/Batch ETL Knowledge Transfer Document
+
+## Project Overview
+- **Project Name**: ENTITY ETL
+- **Purpose**: To transform a legacy Proc code to a modernized Java platform
+- **Key Stakeholders**: IRS
+- **Current Status**: Active development
+
+## System Architecture
+
+### High-Level Architecture
+[Insert a brief description of the overall system architecture]
+
+```
+[Placeholder for architecture diagram]
+```
+
+### Data Flow
+1. **Source Systems**: [List the source systems/databases]
+2. **Extraction Process**: [Describe how data is extracted]
+3. **Transformation Logic**: [Outline key transformations]
+4. **Loading Process**: [Describe the loading destinations]
+5. **Error Handling**: [Explain how errors are handled]
+
+## Technical Stack
+
+- **Framework**: Spring Boot/Batch
+- **Java Version**: Java 17 (based on the README instructions)
+- **Database**: H2 (for testing, based on schema-h2.sql file) and likely a production database
+- **Build Tool**: Maven (evidenced by pom.xml and mvn commands in README)
+- **CI/CD**: Appears to have integration tests that would support CI/CD implementation
+- **Other Technologies**:
+  - Spring Security (for authentication)
+  - Spring MVC (for web endpoints)
+  - Logging framework (logback-spring.xml visible)
+  - JSON processing (tableData.json visible)
+
+## Development Environment Setup
+
+### Prerequisites
+- JDK 17
+- Database client (for H2 database)
+- IDE (appears to be using VS Code in screenshots)
+- Maven
+
+### Setup Instructions
+1. **Repository Access**
+   - The ENTITY-SERVICE repository contains the ETL application code
+   - Follow the branch strategy established by the team
+
+2. **Local Configuration**
+   - Multiple property files are needed:
+     - application-apt.properties
+     - application-dev.properties
+     - application-embedded.properties 
+     - application-local.properties
+     - application-test-local.properties
+   - Database connection setup is in these property files
+
+3. **Build and Run Instructions**
+   ```
+   # Clean install
+   mvn clean install -DskipTests
+   
+   # Run the application (with local profile)
+   java -Dspring.profiles.active=local -jar entity-service-1.0.jar
+   
+   # Alternative run command (from README)
+   java -Dspring.profiles.active=local -jar entity-service-batch.jar
+   
+   # For non-default Java 17
+   "C:\Users\{USER}\bin\jre\bin\java.exe" -Dspring.profiles.active=local -jar entity-service-1.0.jar
+   ```
+
+4. **Verification Steps**
+   - Access the application via: http://localhost:8443/api/entity-service/swagger-ui/index.html
+   - For daily/weekly integration tests: http://localhost:8443/api/entity-service/daily/snapshot?date=YYYYMMDD
+   - Access H2 console: http://localhost:8882/h2-console
+
+## Codebase Walkthrough
+
+### Project Structure
+```
+gov.irs.sbse.os.ts.csp.alsentity.ele/
+├── batch/
+│   ├── archiveinv/
+│   │   ├── CreateEomdctsTasklet.java
+│   │   ├── CreateEomtrailTasklet.java
+│   │   ├── PopulateEomdctsTableTasklet.java
+│   ├── casesdp/
+│   │   ├── ArchiveAreaDataFileTasklet.java
+│   │   ├── GenerateAreaDataFileTasklet.java
+│   │   ├── GenerateCasesdpDataFileTasklet.java
+│   │   ├── InitialEntcsdEomTableTasklet.java
+│   │   ├── InitialEntmoEomTableTasklet.java
+│   │   ├── InitialTranfoilEomTableTasklet.java
+│   │   ├── RemoveOldDataAndBadFileTasklet.java
+│   │   ├── UpdateArchiveinvAndArchivecasesdpTableTasklet.java
+│   ├── commontasklet/
+│   │   ├── CreateLogLoadRecordTasklet.java
+│   │   ├── MisArchivCommonTasklet.java
+│   │   ├── SelfRunnerTasklet.java
+│   │   ├── ValidationTasklet.java
+│   ├── et/
+│   │   ├── ETJobFixTasklet.java
+│   │   ├── BasicDatParser.java
+│   │   ├── DailyLoadCheck.java
+│   │   ├── WeeklyLoadCheck.java
+│   ├── component/
+│   │   ├── AsyncTableMigrator.java
+│   │   ├── ProgressBar.java
+│   │   ├── TableMetricsComponent.java
+│   ├── config/
+│   │   ├── AdditionalportConfig.java
+│   │   ├── ArchiveinvProcessorConfig.java
+│   │   ├── CasesdpLoadConfiguration.java
+│   │   ├── CasesdpProcessorConfig.java
+│   │   ├── CheckCountNosegProcessorConfig.java
+│   │   ├── DataSourceConfig.java
+│   │   ├── E1LoadConfiguration.java ... E9LoadConfiguration.java
+│   │   ├── E1ProcessorConfig.java ... E9ProcessorConfig.java
+│   │   ├── EntricksProcessorConfig.java
+│   │   ├── JobParameterConfig.java
+│   │   ├── MailSenderConfig.java
+│   │   ├── MisArchivProcessorConfig.java
+│   │   ├── NosegOpenProcessorConfig.java
+│   │   ├── NosegProcessorConfig.java
+│   │   ├── ReadOnlyDataSource.java
+│   │   ├── ReadOnlyJdbcTemplate.java
+│   │   ├── S1LoadConfiguration.java
+│   │   ├── S1ProcessorConfig.java
+│   │   ├── WebConfig.java
+├── controller/
+│   ├── DailyWeeklyIntegrationController.java
+│   ├── LogLoadController.java
+│   ├── SnapshotController.java
+│   ├── StatusController.java
+├── data/
+│   ├── CasesdpRecord.java
+│   ├── E1Record.java ... E9Record.java
+│   ├── S1Record.java
+├── entityprocess/
+│   ├── E1RecordProcessor.java
+│   ├── E2RecordProcessor.java
+│   ├── E3RecordProcessor.java
+├── exception/
+│   ├── EntityException.java
+│   ├── EntityGlobalExceptionHandler.java
+│   ├── PermanentException.java
+│   ├── TransientException.java
+├── listener/
+│   ├── JobCompletionNotificationListener.java
+├── mapper/
+│   ├── E1RecordFieldSetMapper.java ... E9RecordFieldSetMapper.java
+│   ├── S1RecordFieldSetMapper.java
+├── model/
+│   ├── ColumnInfo.java
+│   ├── E1Tmp.java
+│   ├── E2Tmp.java
+│   ├── E3Tmp.java
+│   ├── E5Tmp.java
+│   ├── Ent.java
+│   ├── EntTmp.java
+│   ├── EntTmp2.java
+│   ├── GenericRow.java
+│   ├── JobStatus.java
+│   ├── JustinSuperObject.java
+│   ├── LogLoad.java
+│   ├── TableInfo.java
+│   ├── TableValidationResult.java
+├── repository/
+│   ├── implementation/
+│   │   ├── AbstractEntityRepository.java
+│   │   ├── AIsEntityRepositoryImpl.java
+│   │   ├── EntityRepositoryImpl.java
+│   ├── EntityRepository.java
+│   ├── EntMonthRepository.java
+│   ├── EntRepository.java
+│   ├── JobStatusRepository.java
+│   ├── LogLoadRepository.java
+├── routes/
+│   ├── DailyFileProcessor.java
+│   ├── DailyFileWatcher.java
+│   ├── FileExceptionProcessor.java
+│   ├── WeeklyFileProcessor.java
+│   ├── WeeklyFileWatcher.java
+├── scheduler/
+│   ├── LoadScheduler.java
+├── security/
+│   ├── AIsUserDto.java
+│   ├── AuthenticationFilter.java
+├── service/
+│   ├── BatchRunJobService.java
+│   ├── DailyIntegrationService.java
+│   ├── DatabaseSnapshotService.java
+│   ├── EmailService.java
+│   ├── EntMonthService.java
+│   ├── EntTmpService.java
+│   ├── JobContext.java
+│   ├── LogLoadService.java
+│   ├── MaterializedViewService.java
+│   ├── WeeklyIntegrationService.java
+├── util/
+│   ├── CIUtils.java
+│   ├── DailyRunner.java
+│   ├── DateUtil.java
+│   ├── DBUtil.java
+│   ├── FieldMappingUtil.java
+│   ├── FileContentProcess.java
+│   ├── FileProcess.java
+│   ├── FileUtil.java
+│   ├── IntegrationTestUtil.java
+│   ├── JobUtil.java
+│   ├── LoggingUtil.java
+│   ├── SqlExecutionUtil.java
+│   ├── SQLUtil.java
+│   ├── StringUtil.java
+│   ├── TimeUtil.java
+│   ├── WeeklyRunner.java
+├── App.java
+├── Constants.java
+```
+
+### Key Components
+1. **Spring Batch Configuration**
+   - Configuration classes in `config` folder define the Spring Batch jobs and steps
+   - `JobParameterConfig.java` manages job parameters
+   - Entity-specific configurations (E1-E9) define specialized processing pipelines
+   
+2. **Jobs and Steps**
+   - Main job configurations are in the `config` folder:
+     - Entity processing jobs (E1-E9)
+     - Casesdp processing jobs
+     - Archive processing jobs
+   - Steps are defined within these configurations, typically following a read-process-write pattern
+
+3. **Readers, Processors, Writers**
+   - **Readers**: Custom readers for each entity type, with data sources defined in `DataSourceConfig.java`
+   - **Processors**: Entity-specific processors in the `entityprocess` folder (E1RecordProcessor.java, etc.)
+   - **Writers**: Custom writers configured in the various load configuration classes
+
+4. **Entity Models**
+   - Core entity classes in the `model` folder (Ent.java, EntTmp.java, etc.)
+   - Record classes in the `data` folder representing the data structures
+   - Field mappers in the `mapper` folder to map between source data and entity objects
+
+5. **Service Layer**
+   - `service` folder contains service implementations:
+     - `BatchRunJobService.java` - Core service for running batch jobs
+     - `DailyIntegrationService.java` and `WeeklyIntegrationService.java` - Handle scheduled integrations
+     - `DatabaseSnapshotService.java` - Manages database snapshots
+     - Other specialized services for specific entities
+
+6. **Utility Classes**
+   - Extensive set of utilities in the `util` folder:
+     - `FileUtil.java` - File operations
+     - `DateUtil.java` - Date handling
+     - `DBUtil.java` - Database operations
+     - `JobUtil.java` - Job-related utilities
+
+### Critical Business Logic
+- **Entity Processing Pipeline**: The core business logic appears to be the transformation of multiple entity types (E1-E9+) from legacy format to the new format
+- **Daily vs. Weekly Processing**: The application handles both daily and weekly data integration processes with specialized components for each
+- **Archiving Process**: Archive management is handled through dedicated tasklets in the `archiveinv` package
+- **Validation Logic**: Validation appears to be centralized in `ValidationTasklet.java`
+- **Error Handling**: Custom exception types suggest a sophisticated error handling approach with different treatment for transient vs. permanent errors
+
+## Testing
+
+### Test Data
+- [Where to find test data sets]
+- [How to generate test data if needed]
+
+### Running Tests
+```
+[Commands for running different test suites]
+```
+
+### Manual Testing Procedures
+- [List any manual testing steps needed]
+
+## Deployment
+
+### Environments
+- Development: Local development using application-dev.properties
+- Testing: Test environment using application-test.properties
+- Production: Production environment using application-apt.properties
+
+### Deployment Process
+1. Build the application with Maven: `mvn clean package -DskipTests`
+2. Deploy the resulting JAR file: `entity-service-batch.jar` or `entity-service-1.0.jar`
+3. Run with appropriate profile: `java -Dspring.profiles.active=<profile> -jar entity-service-batch.jar`
+4. Verify deployment by accessing the Swagger UI endpoint
+
+### Monitoring
+- Job status monitoring via `StatusController.java`
+- Email notifications appear to be configured in `MailSenderConfig.java`
+- Table metrics available through `TableMetricsComponent.java`
+- Progress tracking available via `ProgressBar.java`
+- Log files located in ALS-ALS/environment/LOG as mentioned in the README
+
+## Common Issues and Solutions
+
+### Known Issues
+- From the README, it appears there are environment-specific configurations that need to be adjusted
+- Java version requirements (Java 17) must be strictly followed
+- Database connectivity issues might occur if configurations are not properly set
+
+### Troubleshooting
+- Check logs located in ALS-ALS/environment/LOG directory
+- For Java version issues, use the specified path to run with Java 17
+- The README suggests using endpoints for troubleshooting:
+  - Set up endpoints for daily or weekly runs
+  - Use snapshot endpoints to verify data state
+- For test errors, use specific test commands with debugging flags enabled
+
+## Domain Knowledge
+
+### Business Terminology
+- **ENTITY ETL**: The process of extracting, transforming, and loading entity data from legacy systems
+- **E1-E9+**: Different entity types being processed through the ETL pipeline
+- **Casesdp**: Case-specific data processing (appears to be a critical business concept)
+- **Archiveinv**: Archive inventory management
+- **Daily/Weekly Integration**: Scheduled processes for integrating data on different cadences
+- **Eom**: Likely "End of Month" processing based on file naming
+
+### Business Rules
+- The application implements multiple entity processing pipelines with specific requirements for each entity type
+- Daily and weekly processing follows different rules and schedules
+- Archiving logic appears to be a critical business function
+- Validation is centralized and appears to be robust
+- Error handling distinguishes between permanent and transient failures
+
+## Onboarding Tasks
+
+### Week 1
+1. **Environment Setup**: 
+   - Set up development environment with Java 17
+   - Configure IDE (VS Code appears to be used in the project)
+   - Clone repository and run build
+   - Verify application starts locally
+
+2. **Codebase Walkthrough**: 
+   - Overview of package structure
+   - Review of Spring Batch configuration
+   - Understand entity models and their relationships
+   - Review service layer implementation
+
+3. **First Tasks**: 
+   - Run and analyze test cases to understand the data flow
+   - Add simple logging to a processor to observe data transformation
+   - Debug a specific entity process (start with E1 which appears simpler)
+
+### Week 2
+1. **Daily Integration Process**:
+   - Review DailyIntegrationService, DailyFileProcessor, and related components
+   - Make a small enhancement to daily processing
+
+2. **Weekly Integration Process**:
+   - Review WeeklyIntegrationService, WeeklyFileProcessor, and related components
+   - Make a small enhancement to weekly processing
+
+3. **Error Handling**:
+   - Study the exception handling framework
+   - Enhance an existing error message or add additional validation
+
+## Communication Channels
+
+- **Team Chat**: To be specified by the team lead
+- **Issue Tracker**: To be specified by the team lead
+- **Documentation**: README.md in the repository, this knowledge transfer document
+- **Regular Meetings**: Daily standup recommended during knowledge transfer period
+
+## Next Steps and Roadmap
+
+- **Immediate Priorities**: Complete knowledge transfer to new developers
+- **Upcoming Work**: To be determined during onboarding sessions
+- **Long-term Vision**: Continue modernization of legacy processes
+
+---
+
+## Appendix
+
+### Configuration Reference
+- **Key Properties Files**:
+  - application-apt.properties - Production settings
+  - application-dev.properties - Development settings
+  - application-embedded.properties - Embedded database settings
+  - application-local.properties - Local development settings
+  - application-test-local.properties - Local test settings
+  - logback-spring.xml - Logging configuration
+
+### External System Interfaces
+- Based on the code structure, the system interfaces with:
+  - Database systems for data storage
+  - File systems for input/output processing
+  - Email systems for notifications
+  - Potential security/authentication systems
+
+### Integration Commands
+- From README file:
+  ```
+  # Setup the endpoint for each extract
+  To test a daily or weekly run, use below endpoint:
+  /daily/all
+  /weekly/all
+  
+  # Setup the endpoint for snapshots
+  http://localhost:8443/api/entity-service/weekly/snapshot?date=YYYYMMDD
+  ```
+
+### Resource Links
+- [Spring Batch Documentation](https://docs.spring.io/spring-batch/docs/current/reference/html/)
+- [Spring Boot Documentation](https://docs.spring.io/spring-boot/docs/current/reference/html/)
+- [H2 Database](https://www.h2database.com/html/main.html)
