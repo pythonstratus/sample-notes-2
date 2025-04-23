@@ -1,0 +1,87 @@
+Core Concept
+The system is designed to ensure revenue officers maintain an appropriate caseload ("inventory") that:
+
+Allows efficient case resolution
+Considers officer grade level and expertise
+Adjusts based on individual circumstances
+Follows standard inventory ranges for different grade levels
+
+Breakdown of Tasks/Modules for Developers
+1. User Authentication & Role Management Module
+
+Implement ENTITY user authentication
+Define user roles (revenue officers, managers, trainees)
+Link users to appropriate inventory ranges based on grade level
+
+2. Inventory Range Configuration Module
+
+Implement standard inventory ranges by grade level:
+
+Grade 13: 1334-50
+Grade 12: 34-50
+Grade 11: 53-79
+Grade 9: 59-69
+Grade 5/7: 49-59
+
+
+Configure grade-specific rules (e.g., Grade 13 case mix of 60% Grade 13 cases, 40% lower-grade cases)
+
+3. Case Assignment Engine
+
+Implement case assignment logic with 5-case weekly assignment limit
+Create exceptions handling for special circumstances
+Develop trainee-specific assignment rules linked to OJT milestones
+Implement prioritization logic for case assignments
+
+4. BEARS Integration Module
+
+Create interface for BEARS request submission
+Implement trainee record creation in ICS
+Manage coach assignment functionality
+Handle position type designation
+
+5. Inventory Monitoring & Alerts Module
+
+Create dashboard showing current inventory vs. standard range
+Implement alerts for inventory exceeding maximum levels
+Track 10-day remediation period for excessive inventory
+Generate notification documentation for employee EPF
+
+6. Workload Balancing Module
+
+Implement options for handling excess inventory:
+
+Reassignment to ICS GM hold file
+Detailing to additional officers
+Group boundary adjustments
+Queue return functionality
+
+
+Create workflow for special case types that can't be moved to queue
+
+7. Reporting & Analytics Module
+
+Generate End of Month Balanced Measures reports
+Exclude trainees from inventory adjustment calculations
+Track inventory trends and compliance with standards
+Support Collection Consultation sessions
+
+8. Documentation & Audit Module
+
+Maintain documentation of inventory adjustments
+Track NFTL determinations and ICS history notations
+Monitor CSED expiration timelines
+Document trust fund case handling
+
+Elements Needing Clarity
+
+System Integration: The document references multiple systems (BEARS, ICS, ICS GM hold file) but doesn't clarify how they interact. Developers need API specifications and data exchange formats.
+Business Rules Specificity: What exactly constitutes "developmental needs," "performance issues," or "complex casework" for inventory adjustments? These subjective terms need clear definitions.
+Approval Workflows: The document doesn't specify approval workflows for inventory adjustments. Who approves reassignments or queue returns?
+Data Fields: Specific data fields needed for each case type are not defined.
+Timeframe Definitions: Terms like "accelerated issuance" need precise definitions.
+User Interface Requirements: No specifications on how users will interact with the system.
+Security Requirements: No mention of security protocols for handling taxpayer data.
+Reporting Requirements: Detailed specifications for End of Month Balanced Measures reports are missing.
+Territory Manager Concurrence: The process for obtaining territory manager approval for reassignments needs clarification.
+System Notifications: Specifics about how the system should notify users of inventory issues are not defined.
