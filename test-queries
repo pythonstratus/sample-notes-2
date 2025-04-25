@@ -1,0 +1,82 @@
+I understand you're not getting any results from the query. Let's break it down into smaller pieces to help debug where the issue might be. Here are some diagnostic queries you can run to identify the problem:
+
+1. First, let's check if the `:roid` parameter value exists and is valid:
+
+```sql
+-- Check if the roid parameter value exists in the main tables
+SELECT roid FROM assn WHERE roid = :roid;
+SELECT roid FROM entmod WHERE roid = :roid;
+```
+
+2. Verify that the join conditions are returning data independently:
+
+```sql
+-- Check if the qskip table has any records with qskipind = 1
+SELECT * FROM qskip WHERE qskipind = 1 LIMIT 10;
+
+-- Check the relationship between tin values in assn and ent tables
+SELECT a.tin, e.tin 
+FROM assn a 
+INNER JOIN ent e ON a.tin = e.tin
+WHERE ROWNUM <= 10;
+
+-- Check if the modqueue table has records matching the roids
+SELECT * FROM modqueue WHERE roid = :roid OR proid = :roid;
+```
+
+3. Simplify the main query by removing the complex CASE statements and formatting to isolate the core issue:
+
+```sql
+SELECT t.tin, t.roid, q.qtin, q.qskipind
+FROM (
+    SELECT tin, 
+           TO_CHAR(a.area, 'FM09') || TO_CHAR(a.territory, 'FM09') ||
+           TO_CHAR(a.grnum, 'FM09') || TO_CHAR(a.ronum, 'FM09') as roid
+    FROM assn a
+) t
+INNER JOIN qskip q ON t.tin = q.qtin
+WHERE q.qskipind = 1
+AND t.roid = :roid;
+```
+
+4. Check if the formatted roid values in the assn table match your parameter value:
+
+```sql
+SELECT 
+    TO_CHAR(area, 'FM09') || TO_CHAR(territory, 'FM09') ||
+    TO_CHAR(grnum, 'FM09') || TO_CHAR(ronum, 'FM09') as formatted_roid,
+    roid
+FROM assn
+WHERE TO_CHAR(area, 'FM09') || TO_CHAR(territory, 'FM09') ||
+      TO_CHAR(grnum, 'FM09') || TO_CHAR(ronum, 'FM09') = :roid
+OR roid = :roid;
+```
+
+5. Check if the last join condition is causing the issue:
+
+```sql
+-- Check if the condition t.roid = m.proid is valid
+-- This looks potentially problematic as you're joining roid to proid
+SELECT a.roid, m.proid 
+FROM assn a
+INNER JOIN modqueue m ON a.roid = m.proid
+WHERE ROWNUM <= 10;
+```
+
+6. Based on the query, verify if this condition is returning any data:
+
+```sql
+SELECT * FROM qskip q
+INNER JOIN assn a ON q.qtin = a.tin
+WHERE q.qskipind = 1
+AND ROWNUM <= 10;
+```
+
+These diagnostic queries should help isolate which part of the query is filtering out all the rows. The most likely issues are:
+
+1. The `:roid` parameter doesn't match any records
+2. The `qskipind = 1` condition is filtering out all records
+3. One of the join conditions isn't matching (particularly the modqueue join on t.roid = m.proid looks suspect)
+4. The formatting logic for the roid is causing a mismatch
+
+After running these queries, you should be able to pinpoint exactly where the issue is occurring.
