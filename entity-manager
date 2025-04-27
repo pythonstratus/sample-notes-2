@@ -1,0 +1,73 @@
+package gov.irs.sbse.os.ts.csp.elsentity.ele.config;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean;
+import org.springframework.orm.jpa.vendor.HibernateJpaVendorAdapter;
+import org.springframework.jdbc.datasource.DriverManagerDataSource;
+
+import javax.sql.DataSource;
+import java.util.Properties;
+
+@Configuration
+public class JpaConfig {
+
+    @Bean
+    public DataSource dataSource() {
+        DriverManagerDataSource dataSource = new DriverManagerDataSource();
+        // These properties will be replaced by values from application-local.properties
+        dataSource.setDriverClassName("${spring.datasource.driver-class-name}");
+        dataSource.setUrl("${spring.datasource.url}");
+        dataSource.setUsername("${spring.datasource.username}");
+        dataSource.setPassword("${spring.datasource.password}");
+        return dataSource;
+    }
+
+    @Bean
+    public LocalContainerEntityManagerFactoryBean entityManagerFactory() {
+        LocalContainerEntityManagerFactoryBean em = new LocalContainerEntityManagerFactoryBean();
+        em.setDataSource(dataSource());
+        em.setPackagesToScan("gov.irs.sbse.os.ts.csp.elsentity.ele.model");
+        
+        HibernateJpaVendorAdapter vendorAdapter = new HibernateJpaVendorAdapter();
+        em.setJpaVendorAdapter(vendorAdapter);
+        
+        Properties properties = new Properties();
+        properties.setProperty("hibernate.dialect", "${spring.jpa.database-platform}");
+        properties.setProperty("hibernate.show_sql", "${spring.jpa.show-sql}");
+        properties.setProperty("hibernate.format_sql", "${spring.jpa.properties.hibernate.format_sql}");
+        em.setJpaProperties(properties);
+        
+        return em;
+    }
+}
+
+
+
+
+@SpringBootApplication
+@EnableJpaRepositories(basePackages = "gov.irs.sbse.os.ts.csp.elsentity.ele.repository")
+@EntityScan(basePackages = "gov.irs.sbse.os.ts.csp.elsentity.ele.model")
+public class App {
+    public static void main(String[] args) {
+        SpringApplication.run(App.class, args);
+    }
+}
+
+
+
+# Database configuration
+spring.datasource.driver-class-name=oracle.jdbc.OracleDriver
+spring.datasource.url=jdbc:oracle:thin:@//your-oracle-host:1521/your-service-name
+spring.datasource.username=yourUsername
+spring.datasource.password=yourPassword
+
+# JPA configuration
+spring.jpa.database-platform=org.hibernate.dialect.Oracle12cDialect
+spring.jpa.hibernate.ddl-auto=none
+spring.jpa.show-sql=true
+spring.jpa.properties.hibernate.format_sql=true
+
+# Important for entity manager
+spring.jpa.generate-ddl=false
+spring.jpa.open-in-view=false
