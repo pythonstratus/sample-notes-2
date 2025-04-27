@@ -1,3 +1,5 @@
+spring.autoconfigure.exclude=org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration,springfox.documentation.swagger2.configuration.Swagger2DocumentationConfiguration
+
 @Bean
 public CommandLineRunner commandLineRunner(
         DailyRunner dailyRunner,
