@@ -1,0 +1,47 @@
+package gov.irs.sbse.os.ts.csp.elsentity.ele.config;
+
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.boot.jdbc.DataSourceBuilder;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
+
+import javax.sql.DataSource;
+
+@Configuration
+public class DataSourceConfig {
+
+    @Primary
+    @Bean
+    @ConfigurationProperties(prefix = "spring.datasource")
+    public DataSource dataSource() {
+        return DataSourceBuilder.create().build();
+    }
+}
+
+
+# Database configuration
+spring.datasource.driver-class-name=oracle.jdbc.OracleDriver
+spring.datasource.url=jdbc:oracle:thin:@//your-oracle-host:1521/your-service-name
+spring.datasource.username=yourUsername
+spring.datasource.password=yourPassword
+
+# JPA configuration
+spring.jpa.database-platform=org.hibernate.dialect.Oracle12cDialect
+spring.jpa.hibernate.ddl-auto=none
+spring.jpa.show-sql=true
+
+# Disable Spring Boot's auto configuration that might be causing conflicts
+spring.autoconfigure.exclude=org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
+
+
+@SpringBootApplication(exclude = {DataSourceAutoConfiguration.class})
+@EnableJpaRepositories(basePackages = "gov.irs.sbse.os.ts.csp.elsentity.ele.repository")
+@EntityScan(basePackages = "gov.irs.sbse.os.ts.csp.elsentity.ele.model")
+@EnableTransactionManagement
+@PropertySource("classpath:application-local.properties")
+public class App {
+    public static void main(String[] args) {
+        SpringApplication.run(App.class, args);
+    }
+}
