@@ -1,0 +1,53 @@
+@Bean
+public Step createLogLoadRecordE5Step(JobRepository jobRepository, PlatformTransactionManager transactionManager) {
+    return new StepBuilder("createLogLoadRecordE5Step", jobRepository)
+        .tasklet((contribution, chunkContext) -> {
+            // First check if record already exists
+            String loadName = entityName;
+            String sql = "SELECT COUNT(*) FROM LOGLOD WHERE LOADNAME = ? AND EXTDT = ?";
+            Integer existingRecord = jdbcTemplate.queryForObject(sql, Integer.class, loadName, "ENTEXTRACT");
+            
+            if (existingRecord != null && existingRecord > 0) {
+                // Record exists, update instead of insert
+                log.info("Record already exists for LOADNAME={} and EXTDT={}. Updating instead.", loadName, "ENTEXTRACT");
+                jdbcTemplate.update(
+                    "UPDATE LOGLOD SET LOADDT = ?, NUMREC = ? WHERE LOADNAME = ? AND EXTDT = ?",
+                    Timestamp.valueOf(loadDateTime), numRecs, loadName, "ENTEXTRACT");
+            } else {
+                // No record exists, proceed with insert
+                jdbcTemplate.update(sql, loadName, Timestamp.valueOf(loadDateTime), numRecs, loadName, Timestamp.valueOf(extrDt));
+            }
+            
+            return RepeatStatus.FINISHED;
+        }, transactionManager)
+        .build();
+}
+
+
+@Override
+public RepeatStatus execute(StepContribution contribution, ChunkContext chunkContext) throws Exception {
+    String loadName = entityName;
+    String me = System.getProperty("user.name");
+    LocalDateTime loadDateTime = DateUtil.getCurrentDateTime();
+    LocalDateTime extrDt = jdbcTemplate.queryForObject(
+            "SELECT " + extractColumn + " FROM " + tableName + " WHERE ROWNUM = 1", LocalDateTime.class);
+    Integer numRecs = jdbcTemplate.queryForObject("SELECT count(*) FROM " + tableName, Integer.class);
+    
+    // Check if record already exists
+    Integer existingRecord = jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM LOGLOD WHERE LOADNAME = ? AND EXTDT = ?", 
+            Integer.class, loadName, Timestamp.valueOf(extrDt));
+    
+    if (existingRecord != null && existingRecord > 0) {
+        // Update existing record instead of insert
+        jdbcTemplate.update(
+            "UPDATE LOGLOD SET LOADDT = ?, NUMREC = ? WHERE LOADNAME = ? AND EXTDT = ?",
+            Timestamp.valueOf(loadDateTime), numRecs, loadName, Timestamp.valueOf(extrDt));
+    } else {
+        // Insert new record
+        String sql = "INSERT into LOGLOD (LOADNAME, EXTDT, LOADDT, NUMREC) values (?,?,?,?)";
+        jdbcTemplate.update(sql, loadName, Timestamp.valueOf(extrDt), Timestamp.valueOf(loadDateTime), numRecs);
+    }
+    
+    return RepeatStatus.FINISHED;
+}
