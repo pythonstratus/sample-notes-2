@@ -14,8 +14,6 @@ public void afterJob(JobExecution jobExecution) {
     jobStatus.setFrequency(jobType);
     jobStatus.setSteps(jobCode);
     
-    // log.info("Saving Job Status: {}", jobStatus);
-    
     if (jobExecution.getStatus() == BatchStatus.FAILED) {
         log.error(format("Job {} failed with the following exceptions:", jobName));
         jobExecution.getAllFailureExceptions()
@@ -23,51 +21,36 @@ public void afterJob(JobExecution jobExecution) {
         
         if(JOB_CODES.contains(jobCode)){
             try {
-                // Check if record already exists
-                String checkSql = "SELECT COUNT(*) FROM job_status WHERE extract_name = ?";
-                Integer existingCount = jdbcTemplate.queryForObject(checkSql, Integer.class, jobStatus.getExtractName());
+                // First try to delete any existing record to avoid constraint violation
+                String deleteQuery = "DELETE FROM job_status WHERE extract_name = ?";
+                jdbcTemplate.update(deleteQuery, jobStatus.getExtractName());
                 
-                if (existingCount != null && existingCount > 0) {
-                    // Update existing record
-                    log.info("Updating existing job status record for: {}", jobStatus.getExtractName());
-                    jdbcTemplate.update(
-                        "UPDATE job_status SET status = ?, start_date = ?, stop_date = ? WHERE extract_name = ?",
-                        jobStatus.getStatus(), jobStatus.getStartDate(), jobStatus.getStopDate(), jobStatus.getExtractName()
-                    );
-                } else {
-                    // Insert new record
-                    jobStatusRepository.save(jobStatus);
-                }
+                // Then save the new status
+                jobStatusRepository.save(jobStatus);
             } catch (Exception e) {
                 log.error(format("Error saving job status: {}", e.getMessage()));
             }
         }
     } else if (isImportJob(jobName)) {
-        // Same code as above for this section as well...
         String tableName = jobCode + "TMP";
         String sql = String.format("SELECT count(*) FROM %s", tableName);
         log.info(format("Count Query: {}", sql));
         Long count = jdbcTemplate.queryForObject(sql, Long.class);
         log.info(format("!!! {} JOB {} is FINISHED! Number of records loaded for {}: {}", jobType, jobName, jobCode, count));
         
-        // Check if record exists before saving
-        String checkSql = "SELECT COUNT(*) FROM job_status WHERE extract_name = ?";
-        Integer existingCount = jdbcTemplate.queryForObject(checkSql, Integer.class, jobStatus.getExtractName());
+        jobStatus.setRecordsLoaded(String.valueOf(count));
         
-        if (existingCount != null && existingCount > 0) {
-            // Update existing record
-            log.info("Updating existing job status record for: {}", jobStatus.getExtractName());
-            jdbcTemplate.update(
-                "UPDATE job_status SET status = ?, start_date = ?, stop_date = ?, records_loaded = ? WHERE extract_name = ?",
-                jobStatus.getStatus(), jobStatus.getStartDate(), jobStatus.getStopDate(), String.valueOf(count), jobStatus.getExtractName()
-            );
-        } else {
-            // Set records loaded and save
-            jobStatus.setRecordsLoaded(String.valueOf(count));
+        try {
+            // First try to delete any existing record to avoid constraint violation
+            String deleteQuery = "DELETE FROM job_status WHERE extract_name = ?";
+            jdbcTemplate.update(deleteQuery, jobStatus.getExtractName());
+            
+            // Then save the new status
             jobStatusRepository.save(jobStatus);
+        } catch (Exception e) {
+            log.error(format("Error saving job status: {}", e.getMessage()));
         }
     } else if (isProcessJob(jobName) && JOB_CODES.contains(jobCode)) {
-        // Apply the same pattern here too
         Long jobCount = jdbcTemplate.queryForObject(
                 "SELECT NUMREC FROM LOGLOD WHERE LOADNAME = ? AND TRUNC(LOADDT) = TRUNC(SYSDATE) ORDER BY LOADDT DESC FETCH FIRST 1 ROWS ONLY",
                 Long.class,
@@ -75,23 +58,15 @@ public void afterJob(JobExecution jobExecution) {
         
         jobStatus.setRecordsLoaded(String.valueOf(jobCount));
         
-        // Check if record exists before saving
-        String checkSql = "SELECT COUNT(*) FROM job_status WHERE extract_name = ?";
-        Integer existingCount = jdbcTemplate.queryForObject(checkSql, Integer.class, jobStatus.getExtractName());
-        
-        if (existingCount != null && existingCount > 0) {
-            // Update existing record
-            log.info("Updating existing job status record for: {}", jobStatus.getExtractName());
-            jdbcTemplate.update(
-                "UPDATE job_status SET status = ?, start_date = ?, stop_date = ?, records_loaded = ? WHERE extract_name = ?",
-                jobStatus.getStatus(), jobStatus.getStartDate(), jobStatus.getStopDate(), String.valueOf(jobCount), jobStatus.getExtractName()
-            );
-        } else {
-            try {
-                jobStatusRepository.save(jobStatus);
-            } catch (Exception e) {
-                log.error(format("Error saving job status: {}", e.getMessage()));
-            }
+        try {
+            // First try to delete any existing record to avoid constraint violation
+            String deleteQuery = "DELETE FROM job_status WHERE extract_name = ?";
+            jdbcTemplate.update(deleteQuery, jobStatus.getExtractName());
+            
+            // Then save the new status
+            jobStatusRepository.save(jobStatus);
+        } catch (Exception e) {
+            log.error(format("Error saving job status: {}", e.getMessage()));
         }
         
         log.info(format("!!! JOB {} is FINISHED!!!", jobName));
