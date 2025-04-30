@@ -6,8 +6,14 @@
  * @return boolean indicating whether the table should be truncated
  */
 private boolean shouldTruncateTable(String jobCode, String tableName) {
+    // If jobCode is null, use default behavior (truncate)
+    if (jobCode == null) {
+        log.warn("Job code is null, using default truncation behavior for table: " + tableName);
+        return true;
+    }
+    
     // Convert to uppercase for case-insensitive comparison
-    String jobCodeUpper = jobCode != null ? jobCode.toUpperCase() : "";
+    String jobCodeUpper = jobCode.toUpperCase();
     String tableNameUpper = tableName != null ? tableName.toUpperCase() : "";
     
     // Rule 1: Only E5 job should truncate ENTEMP
