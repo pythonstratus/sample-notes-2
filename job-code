@@ -45,3 +45,24 @@ if (sourceCount > 0) {
 } else {
     // The rest of your existing code for when the source table doesn't exist
 }
+
+
+The old commits containing the file are completely removed from the new history.
+	•	When you git push --force, you overwrite the history on GitHub.
+	•	Other users’ local clones still have the old commits, but:
+	•	If they try to push, GitHub will reject it due to history divergence.
+	•	If they re-clone, they’ll only get the new, cleaned version.
+	•	To stay in sync, they must either:
+	•	Re-clone the repo.
+	•	Or manually delete their local history and align with the new version.
+
+🚨 However:
+	•	If someone cloned or forked the repo before the purge, they still have a copy.
+	•	GitHub won’t serve the old commits after rewriting, but forks and cached clones elsewhere might.
+	•	To be as thorough as possible:
+	•	Delete any tags pointing to the bad commits.
+	•	Ask collaborators to delete or clean local clones.
+	•	If the data was pushed to GitHub, consider contacting GitHub Support for help in removing cached data (especially for credentials or secrets).
+
+So in short: if done properly and fully, you effectively wipe the file from GitHub and future clones — but existing clones before the purge still need attention.
+
