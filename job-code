@@ -1,0 +1,41 @@
+/**
+ * Determines if a table should be truncated based on job code and table name
+ * 
+ * @param jobCode The job code passed to the restoreSnapShotByDate method (E5, E7, etc.)
+ * @param tableName The name of the table being considered for truncation
+ * @return boolean indicating whether the table should be truncated
+ */
+private boolean shouldTruncateTable(String jobCode, String tableName) {
+    // Convert to uppercase for case-insensitive comparison
+    String jobCodeUpper = jobCode != null ? jobCode.toUpperCase() : "";
+    String tableNameUpper = tableName != null ? tableName.toUpperCase() : "";
+    
+    // Rule 1: Only E5 job should truncate ENTEMP
+    if (tableNameUpper.equals("ENTEMP")) {
+        return jobCodeUpper.equals("E5");
+    }
+    
+    // Rule 2: E7 job should not truncate TIMENON (E8 does it)
+    if (tableNameUpper.equals("TIMENON") && jobCodeUpper.equals("E7")) {
+        return false;
+    }
+    
+    // Default behavior: truncate the table
+    return true;
+}
+
+
+if (sourceCount > 0) {
+    // Assume jobCode is already available as a parameter to your method
+    if (shouldTruncateTable(jobCode, srcTable)) {
+        String truncateSourceSQL = "TRUNCATE TABLE " + srcTable;
+        log.info(format:"Truncating existing source table '{}'.", srcTable);
+        try (PreparedStatement ps = conn.prepareStatement(truncateSourceSQL)) {
+            ps.execute();
+        }
+    } else {
+        log.info(format:"Skipping truncation for table '{}' in job '{}'.", srcTable, jobCode);
+    }
+} else {
+    // The rest of your existing code for when the source table doesn't exist
+}
