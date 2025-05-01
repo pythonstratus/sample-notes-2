@@ -1,0 +1,46 @@
+<!-- For Maven -->
+<dependencies>
+    <!-- SLF4J API -->
+    <dependency>
+        <groupId>org.slf4j</groupId>
+        <artifactId>slf4j-api</artifactId>
+        <version>2.0.7</version>
+    </dependency>
+    
+    <!-- Logback implementation -->
+    <dependency>
+        <groupId>ch.qos.logback</groupId>
+        <artifactId>logback-classic</artifactId>
+        <version>1.4.11</version>
+    </dependency>
+</dependencies>
+
+
+
+<configuration>
+    <!-- Define a timestamp property with pattern and scope -->
+    <timestamp key="bySecond" datePattern="yyyyMMdd'T'HHmmss"/>
+    
+    <!-- Console appender for displaying logs in terminal -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+    
+    <!-- File appender for your timestamped log file -->
+    <appender name="FILE" class="ch.qos.logback.core.FileAppender">
+        <!-- Use the timestamp in the filename -->
+        <file>logs/application-${bySecond}.log</file>
+        <append>true</append>
+        <encoder>
+            <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+    
+    <!-- Root logger configuration -->
+    <root level="INFO">
+        <appender-ref ref="CONSOLE" />
+        <appender-ref ref="FILE" />
+    </root>
+</configuration>
