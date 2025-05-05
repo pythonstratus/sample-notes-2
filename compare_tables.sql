@@ -11,7 +11,6 @@ AS
     v_match_pct NUMBER;
     v_error_msg VARCHAR2(4000);
     v_column_list VARCHAR2(32767);
-    v_comparison_clause VARCHAR2(32767);
 BEGIN
     -- Create COMPARISON_RESULTS table if it doesn't exist
     BEGIN
@@ -96,42 +95,6 @@ BEGIN
             'Match percentage: ' || TO_CHAR(v_match_pct) || '%'
         );
         
-        -- Create comparison clause for the difference table
-        v_comparison_clause := '';
-        DECLARE
-            v_column_array DBMS_SQL.VARCHAR2_TABLE;
-            v_start_pos INTEGER := 1;
-            v_end_pos INTEGER;
-            v_col_name VARCHAR2(128);
-            i INTEGER := 1;
-        BEGIN
-            v_column_array := DBMS_SQL.VARCHAR2_TABLE();
-            
-            -- Parse column list
-            WHILE v_start_pos <= LENGTH(v_column_list) LOOP
-                v_end_pos := INSTR(v_column_list, ',', v_start_pos);
-                IF v_end_pos = 0 THEN
-                    v_col_name := TRIM(SUBSTR(v_column_list, v_start_pos));
-                    v_start_pos := LENGTH(v_column_list) + 1;
-                ELSE
-                    v_col_name := TRIM(SUBSTR(v_column_list, v_start_pos, v_end_pos - v_start_pos));
-                    v_start_pos := v_end_pos + 1;
-                END IF;
-                
-                v_column_array.EXTEND;
-                v_column_array(i) := v_col_name;
-                i := i + 1;
-            END LOOP;
-            
-            -- Build comparison clause
-            FOR j IN 1..v_column_array.COUNT LOOP
-                IF j > 1 THEN
-                    v_comparison_clause := v_comparison_clause || ' AND ';
-                END IF;
-                v_comparison_clause := v_comparison_clause || 's.' || v_column_array(j) || ' = t.' || v_column_array(j);
-            END LOOP;
-        END;
-        
         -- Create detailed difference table
         BEGIN
             EXECUTE IMMEDIATE 'DROP TABLE DIFF_' || p_snapshot_table || '_' || p_target_table || ' PURGE';
@@ -139,33 +102,79 @@ BEGIN
             WHEN OTHERS THEN NULL;
         END;
         
-        IF v_comparison_clause IS NOT NULL AND v_comparison_clause != '' THEN
-            v_sql := '
-                CREATE TABLE DIFF_' || p_snapshot_table || '_' || p_target_table || ' AS
-                SELECT ''Only in ' || p_snapshot_table || ''' AS SOURCE, t.* 
-                FROM ' || p_snapshot_table || ' t
-                WHERE NOT EXISTS (
-                    SELECT 1 FROM ' || p_target_table || ' s
-                    WHERE ' || v_comparison_clause || '
-                )
-                UNION ALL
-                SELECT ''Only in ' || p_target_table || ''' AS SOURCE, t.*
-                FROM ' || p_target_table || ' t
-                WHERE NOT EXISTS (
-                    SELECT 1 FROM ' || p_snapshot_table || ' s
-                    WHERE ' || v_comparison_clause || '
-                )';
+        -- Create a simplified difference table using EXISTS subquery with column list
+        v_sql := '
+            CREATE TABLE DIFF_' || p_snapshot_table || '_' || p_target_table || ' AS
+            SELECT ''Only in ' || p_snapshot_table || ''' AS SOURCE, a.* 
+            FROM ' || p_snapshot_table || ' a
+            WHERE NOT EXISTS (
+                SELECT 1 FROM ' || p_target_table || ' b
+                WHERE 1=1';
+                
+        -- Add column comparisons
+        DECLARE
+            v_pos NUMBER := 1;
+            v_next_pos NUMBER;
+            v_col VARCHAR2(128);
+        BEGIN
+            LOOP
+                v_next_pos := INSTR(v_column_list, ',', v_pos);
+                
+                IF v_next_pos = 0 THEN
+                    v_col := SUBSTR(v_column_list, v_pos);
+                    v_sql := v_sql || ' AND a.' || v_col || ' = b.' || v_col;
+                    EXIT;
+                ELSE
+                    v_col := SUBSTR(v_column_list, v_pos, v_next_pos - v_pos);
+                    v_sql := v_sql || ' AND a.' || v_col || ' = b.' || v_col;
+                    v_pos := v_next_pos + 1;
+                END IF;
+            END LOOP;
             
+            -- Complete the first half of the query
+            v_sql := v_sql || '
+            )
+            UNION ALL
+            SELECT ''Only in ' || p_target_table || ''' AS SOURCE, a.* 
+            FROM ' || p_target_table || ' a
+            WHERE NOT EXISTS (
+                SELECT 1 FROM ' || p_snapshot_table || ' b
+                WHERE 1=1';
+                
+            -- Reset position
+            v_pos := 1;
+            
+            -- Add column comparisons for second half
+            LOOP
+                v_next_pos := INSTR(v_column_list, ',', v_pos);
+                
+                IF v_next_pos = 0 THEN
+                    v_col := SUBSTR(v_column_list, v_pos);
+                    v_sql := v_sql || ' AND a.' || v_col || ' = b.' || v_col;
+                    EXIT;
+                ELSE
+                    v_col := SUBSTR(v_column_list, v_pos, v_next_pos - v_pos);
+                    v_sql := v_sql || ' AND a.' || v_col || ' = b.' || v_col;
+                    v_pos := v_next_pos + 1;
+                END IF;
+            END LOOP;
+            
+            -- Complete the query
+            v_sql := v_sql || '
+            )';
+            
+            -- Execute the SQL
             EXECUTE IMMEDIATE v_sql;
+            
             DBMS_OUTPUT.PUT_LINE('Comparison complete. Results stored in COMPARISON_RESULTS table.');
             DBMS_OUTPUT.PUT_LINE('Detailed differences stored in DIFF_' || p_snapshot_table || '_' || p_target_table);
-        ELSE
-            DBMS_OUTPUT.PUT_LINE('Could not create difference table - no comparison clause generated.');
-        END IF;
+        END;
+        
     EXCEPTION
         WHEN OTHERS THEN
             v_error_msg := SQLERRM;
             
+            -- Log error to comparison results
             BEGIN
                 INSERT INTO COMPARISON_RESULTS (
                     SNAPSHOT_TABLE,
