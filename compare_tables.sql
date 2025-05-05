@@ -9,6 +9,7 @@ AS
     v_count_target NUMBER;
     v_diff_count NUMBER;
     v_match_pct VARCHAR2(10);
+    v_error_msg VARCHAR2(4000);
 BEGIN
     -- Create temporary comparison results table if it doesn't exist
     BEGIN
@@ -171,7 +172,10 @@ BEGIN
         DBMS_OUTPUT.PUT_LINE('Detailed differences stored in DIFF_' || p_snapshot_table || '_' || p_target_table);
     EXCEPTION
         WHEN OTHERS THEN
-            -- Log error
+            -- Fix for ORA-00984: Store error message in variable first
+            v_error_msg := SQLERRM;
+            
+            -- Log error using the variable
             INSERT INTO COMPARISON_RESULTS (
                 SNAPSHOT_TABLE,
                 TARGET_TABLE,
@@ -187,7 +191,7 @@ BEGIN
                 -1,
                 -1,
                 SYSDATE,
-                'Error comparing tables: ' || SUBSTR(SQLERRM, 1, 3990)
+                'Error comparing tables: ' || SUBSTR(v_error_msg, 1, 3990)
             );
             RAISE;
     END;
@@ -195,7 +199,8 @@ BEGIN
     COMMIT;
 EXCEPTION
     WHEN OTHERS THEN
-        DBMS_OUTPUT.PUT_LINE('Procedure error: ' || SQLERRM);
+        v_error_msg := SQLERRM;
+        DBMS_OUTPUT.PUT_LINE('Procedure error: ' || v_error_msg);
         RAISE;
 END compare_tables;
 /
