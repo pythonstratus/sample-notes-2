@@ -1,0 +1,27 @@
+/*
+* Function: NAMECHOP
+* 
+* Description:
+*   Standardizes employee name formats by converting "Last, First" format to "First Last"
+*   while considering employee type classifications. This function ensures consistent
+*   name formatting across the system.
+*
+* Parameters:
+*   emp_name (CHAR) - The employee name to be processed
+*   emp_type (CHAR) - Employee type code (R=Regular, P=Part-time, C=Contractor, M=Manager)
+*
+* Returns:
+*   VARCHAR2 - The standardized employee name
+*
+* Processing:
+*   1. Returns 'VACANT' names unchanged
+*   2. Replaces dots with spaces and trims extra spaces
+*   3. For names with comma at position 2: reorders to "First Last" format
+*   4. For names with comma at position 1: reorders to "First Last" format
+*   5. Returns original name if no comma is found
+*
+* Error Handling:
+*   Catches exceptions and outputs error information via dbms_output
+*
+* Created: 3/27/2025
+*/
