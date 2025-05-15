@@ -1,226 +1,32 @@
-# Oracle User and Role Management System
+# Summary: Resolving the timestart/timeend Variable Issue in c.runARCHIVEINV
 
-A comprehensive solution for Oracle DBAs to manage users, roles, and permissions efficiently.
+## Problem Identified
+After analyzing the code in both c.runARCHIVEINV (shell script) and mk_arch_INV.sql (SQL script), we've identified a variable naming inconsistency causing "table mismatch" errors during testing. The shell script correctly sets and passes `STRTDT` and `ENDDT` variables, but some sections of the SQL script are attempting to reference undefined variables named `timestart` and `timeend`.
 
-## Overview
+## Root Cause
+- The shell script retrieves date parameters from the ENTMONTH table and sets variables `STRTDT` and `ENDDT`
+- These are properly bound to `:startdt` and `:enddt` in many sections of the SQL code
+- However, some SQL queries are incorrectly referencing `:timestart` and `:timeend` variables that were never defined
+- This mismatch is causing SQL execution errors when those sections run
 
-This package provides a complete set of procedures for creating and managing Oracle database users with role-based access control. It addresses the common challenges of user provisioning while maintaining security best practices.
+## Recommended Solution
+We have two options to fix this:
 
-Key features:
-- Creation of predefined roles (User, Developer, Admin) with appropriate permissions
-- MD5 password generation for enhanced security
-- Batch user creation for efficient onboarding
-- Granular table permission management
-- Test mode for script validation
-- Change request documentation generation
+### Option 1: SQL Script Modification (Recommended)
+- Search for all occurrences of `:timestart` and `:timeend` in mk_arch_INV.sql
+- Replace them with `:startdt` and `:enddt` respectively to match the variables being passed
+- This is the cleaner approach requiring fewer changes
 
-## Components
+### Option 2: Shell Script Modification
+- Add additional variables `timestart` and `timeend` in the shell script as aliases
+- Ensure these new variables are properly passed to the SQL script
+- This approach requires more changes but might be preferable if SQL modification is restricted
 
-The system consists of several integrated procedures:
+## Implementation Approach
+1. Make a backup of both scripts before modifications
+2. Implement the changes (preferably Option 1)
+3. Test with a small dataset to verify fixes
+4. Deploy during a maintenance window
+5. Document the changes for future reference
 
-1. **setup_roles** - Creates and configures role types with appropriate permissions
-2. **grant_tables_to_role** - Assigns table permissions to roles
-3. **create_multiple_users** - Creates users with MD5 hashed passwords and assigns roles
-4. **generate_change_doc** - Creates documentation for change requests
-5. **run_complete_example** - Demonstrates the full workflow with a test mode option
-
-## Roles and Permissions
-
-The system supports three predefined role types:
-
-| Role Type  | Permissions                                         | Typical Users             |
-|------------|----------------------------------------------------|-----------------------------|
-| USER       | SELECT                                             | Testers, Analysts           |
-| DEVELOPER  | SELECT, INSERT, DELETE                             | Developers, Data Engineers  |
-| ADMIN      | SELECT, INSERT, UPDATE, DELETE, CREATE objects     | DBAs, Lead Developers       |
-
-## Prerequisites
-
-- Oracle Database 11g or higher
-- DBA privileges or at least:
-  - CREATE USER system privilege
-  - CREATE ROLE system privilege
-  - EXECUTE on DBMS_CRYPTO
-  - Ability to grant object privileges
-
-## Installation
-
-1. Connect to your Oracle database as a DBA or privileged user:
-   ```
-   sqlplus username/password@database AS SYSDBA
-   ```
-
-2. Run the script file containing all procedures:
-   ```
-   @oracle_user_management.sql
-   ```
-
-3. Verify installation:
-   ```sql
-   SELECT OBJECT_NAME, STATUS FROM USER_OBJECTS 
-   WHERE OBJECT_TYPE = 'PROCEDURE' 
-   AND OBJECT_NAME IN ('SETUP_ROLES', 'GRANT_TABLES_TO_ROLE', 'CREATE_MULTIPLE_USERS', 
-                       'GENERATE_CHANGE_DOC', 'RUN_COMPLETE_EXAMPLE');
-   ```
-
-## Usage Examples
-
-### Basic Example - Create Users with Developer Role
-
-```sql
-DECLARE
-  v_usernames SYS.ODCIVARCHAR2LIST := SYS.ODCIVARCHAR2LIST('DEV_USER1', 'DEV_USER2');
-  v_passwords SYS.ODCIVARCHAR2LIST;
-BEGIN
-  -- Enable output to see results
-  SET SERVEROUTPUT ON SIZE 1000000;
-  
-  -- Create users with DEVELOPER role
-  create_multiple_users(v_usernames, 'DEVELOPER', v_passwords);
-  
-  -- Display the generated credentials
-  FOR i IN 1..v_passwords.COUNT LOOP
-    DBMS_OUTPUT.PUT_LINE(v_passwords(i));
-  END LOOP;
-END;
-/
-```
-
-### Grant Tables to Existing Role
-
-```sql
-DECLARE
-  v_tables SYS.ODCIVARCHAR2LIST := SYS.ODCIVARCHAR2LIST(
-    'SCHEMA1.TABLE1',
-    'SCHEMA1.TABLE2',
-    'SCHEMA2.TABLE3'
-  );
-BEGIN
-  -- Enable output
-  SET SERVEROUTPUT ON SIZE 1000000;
-  
-  -- Grant SELECT, INSERT, DELETE to Developer role
-  grant_tables_to_role('als_developer_role', v_tables, 'SELECT, INSERT, DELETE');
-END;
-/
-```
-
-### Generate Change Request Documentation
-
-```sql
-DECLARE
-  v_usernames SYS.ODCIVARCHAR2LIST := SYS.ODCIVARCHAR2LIST('ANALYST1', 'ANALYST2');
-  v_tables SYS.ODCIVARCHAR2LIST := SYS.ODCIVARCHAR2LIST(
-    'SCHEMA1.REPORT_TABLE',
-    'SCHEMA1.METRIC_TABLE'
-  );
-BEGIN
-  -- Enable output
-  SET SERVEROUTPUT ON SIZE 1000000;
-  
-  -- Generate documentation for USER role
-  generate_change_doc(v_usernames, 'USER', v_tables);
-END;
-/
-```
-
-### Complete Workflow with Test Mode
-
-```sql
-BEGIN
-  -- Run in test mode first (TRUE)
-  run_complete_example(TRUE);
-  
-  -- When ready to execute for real, change to FALSE
-  -- run_complete_example(FALSE);
-END;
-/
-```
-
-## Customization
-
-### Adding New Role Types
-
-To add a new role type (e.g., 'ANALYST'):
-
-1. Modify the CASE statements in the `setup_roles` procedure
-2. Add the new role type and its privileges
-3. Update the CASE statements in other procedures that reference role types
-
-### Tailoring Permission Sets
-
-Adjust the privileges granted to each role in the `setup_roles` procedure to match your organization's security requirements.
-
-## Security Considerations
-
-- Always run in test mode first before executing in production
-- Store generated passwords securely
-- Consider implementing password expiration policies
-- For production systems, consider additional security measures
-- The scripts use DBMS_ASSERT to prevent SQL injection
-
-## Troubleshooting
-
-### Common Issues
-
-1. **ORA-01031: insufficient privileges**
-   - Ensure you're connected as SYSDBA or a user with administrative privileges
-
-2. **ORA-00942: table or view does not exist**
-   - Verify the tables exist and are accessible to the executing user
-
-3. **ORA-04063: procedure has errors**
-   - Check for compilation errors with:
-     ```sql
-     SHOW ERRORS PROCEDURE procedure_name;
-     ```
-
-4. **ORA-06550: line X, column Y: PLS-00201: identifier 'DBMS_CRYPTO' must be declared**
-   - Grant execute permissions on DBMS_CRYPTO:
-     ```sql
-     GRANT EXECUTE ON SYS.DBMS_CRYPTO TO your_dba_user;
-     ```
-
-### Error Logging
-
-Each procedure includes error handling that will output information about any issues encountered. Enable SERVEROUTPUT to see these messages:
-
-```sql
-SET SERVEROUTPUT ON SIZE 1000000;
-```
-
-## Best Practices
-
-1. Use test mode (`p_test_only => TRUE`) to validate changes before execution
-2. Generate change documentation for audit purposes
-3. Use role-based permissions instead of direct grants to users
-4. Keep a record of all created users and their roles
-5. Periodically review and audit role permissions
-
-## Notes for DBAs
-
-- The procedures in this package require elevated privileges and should only be executed by authorized DBAs
-- Changes to role permissions will affect all users assigned to that role
-- Consider using this script as part of a broader user management strategy
-- Integration with LDAP or SSO may require additional customization
-
-
-
-Subject: Oracle User Management System - Enhanced Scripts for Review
-
-Hello team,
-
-I've developed an enhanced Oracle user and role management system to address our recent discussions about creating different role types (user, developer, admin) with appropriate table permissions. The attached SQL script provides a comprehensive solution that includes:
-
-- MD5 password generation for secure user creation
-- Batch processing for multiple users
-- Role-based permission management
-- Change request documentation generation for Christina
-- Test mode to validate scripts before execution
-
-The script allows us to efficiently manage permissions across multiple tables and users while maintaining security best practices. It's designed to work seamlessly with TOAD and our Spring Boot applications.
-
-Please review the attached Word document for detailed explanations and the SQL script for implementation. Let me know if you have any questions or suggestions for improvement.
-
-Best regards,
-[Your Name]
+This solution directly addresses the variable inconsistency issue identified in Story 1696745 regarding the rollback when job fails, while minimizing changes to the codebase.
