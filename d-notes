@@ -1,32 +1,73 @@
-# Summary: Resolving the timestart/timeend Variable Issue in c.runARCHIVEINV
+Hi Jyoti,
+I've reviewed the SQL query for the Time View that you shared. After analyzing the code, I understand the issue you're facing - one of the subqueries is returning approximately 3 million records, causing the endpoint to hang indefinitely.
+Based on your note suggesting that we should consider using CASE statements instead of UNIONs, I believe this is indeed the right approach. Here are my detailed recommendations:
+Main Issue
+The query structure with multiple UNION ALLs is likely creating large intermediate result sets, particularly the query you mentioned that returns 3M records. This is causing performance degradation in the Time View endpoint.
+Recommended Optimizations
 
-## Problem Identified
-After analyzing the code in both c.runARCHIVEINV (shell script) and mk_arch_INV.sql (SQL script), we've identified a variable naming inconsistency causing "table mismatch" errors during testing. The shell script correctly sets and passes `STRTDT` and `ENDDT` variables, but some sections of the SQL script are attempting to reference undefined variables named `timestart` and `timeend`.
+Replace UNIONs with CASE Statements
+Instead of selecting from the same tables multiple times and combining with UNION ALL, we can use CASE expressions to conditionally select values in a single query. This should significantly reduce the query overhead by avoiding large intermediate results.
+Optimize the Latest Month Calculation
+The latest_month CTE is referenced repeatedly throughout the query. We can optimize this and ensure it's only calculated once.
+Add Additional Filters
+If possible, consider adding more restrictive filters to reduce the dataset size before processing.
+Review and Optimize Indexes
+Ensure appropriate indexes exist on commonly joined and filtered columns:
 
-## Root Cause
-- The shell script retrieves date parameters from the ENTMONTH table and sets variables `STRTDT` and `ENDDT`
-- These are properly bound to `:startdt` and `:enddt` in many sections of the SQL code
-- However, some SQL queries are incorrectly referencing `:timestart` and `:timeend` variables that were never defined
-- This mismatch is causing SQL execution errors when those sections run
+t.roid, a.roid (join columns)
+t.active, t.timedef (filter columns)
+t.code, t.timecode (filter columns)
+rptenddt in the eom table
 
-## Recommended Solution
-We have two options to fix this:
 
-### Option 1: SQL Script Modification (Recommended)
-- Search for all occurrences of `:timestart` and `:timeend` in mk_arch_INV.sql
-- Replace them with `:startdt` and `:enddt` respectively to match the variables being passed
-- This is the cleaner approach requiring fewer changes
+Simplify Existence Checks
+The EXISTS subqueries could potentially be rewritten as JOINs for better performance.
 
-### Option 2: Shell Script Modification
-- Add additional variables `timestart` and `timeend` in the shell script as aliases
-- Ensure these new variables are properly passed to the SQL script
-- This approach requires more changes but might be preferable if SQL modification is restricted
-
-## Implementation Approach
-1. Make a backup of both scripts before modifications
-2. Implement the changes (preferably Option 1)
-3. Test with a small dataset to verify fixes
-4. Deploy during a maintenance window
-5. Document the changes for future reference
-
-This solution directly addresses the variable inconsistency issue identified in Story 1696745 regarding the rollback when job fails, while minimizing changes to the codebase.
+Implementation Suggestion
+I've started drafting a refactored version of the query using the CASE approach. Here's a simplified example of how we can structure it:
+sqlWITH latest_month AS (
+    SELECT rptmnth 
+    FROM eom
+    WHERE rptenddt = (SELECT MAX(rptenddt) FROM eom)
+)
+SELECT DISTINCT 
+    t.rptdt,
+    t.roid,
+    CASE 
+        WHEN t.active IN ('Y','C') AND t.timedef = 'D' AND t.code NOT IN ('106','107',...) THEN a.type
+        WHEN t.active IN ('Y','C') AND t.timedef = 'D' AND t.code IN ('106','107',...) THEN a.type
+        WHEN t.active IN ('Y','C') AND t.timedef <> 'D' THEN a.type
+        WHEN t.subcode > '500' THEN '000'
+        WHEN t.timecode = '770' THEN '613'
+        ELSE NULL
+    END AS type,
+    CASE
+        -- Similar conditional logic for timecode
+    END AS timecode,
+    CASE
+        -- Similar conditional logic for cdname
+    END AS cdname,
+    TO_NUMBER(t.hours) AS hours,
+    CASE
+        -- Similar conditional logic for other columns
+    END AS ctrsdef,
+    -- Other columns with CASE statements as needed
+FROM 
+    timetin t
+LEFT JOIN 
+    archiveinv a ON t.roid = a.roid
+LEFT JOIN 
+    entcode e ON (t.subcode = e.code OR t.timecode = e.code)
+LEFT JOIN 
+    entmod m ON t.roid = m.roid AND t.timesid = m.emodsid
+CROSS JOIN
+    latest_month lm
+WHERE
+    (
+        (t.active IN ('Y','C') AND a.month = lm.rptmnth)
+        OR (e.active IN ('Y','C') AND a.month = lm.rptmnth)
+    )
+    -- Add other necessary filter conditions
+I'm happy to work with you on implementing and testing the complete solution. Would you like me to develop a fully refactored version of the query based on the complete code you shared?
+Let me know if you need any clarification or have additional information about the business requirements that might affect the optimization approach.
+Best regards,
