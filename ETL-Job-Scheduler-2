@@ -1,0 +1,879 @@
+// Global variables
+let jobConfigs = [];
+let jobExecutions = [];
+let currentPage = 0;
+let totalPages = 0;
+
+// Initialize when the document is ready
+document.addEventListener('DOMContentLoaded', function() {
+    // Set up tooltips
+    const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]');
+    tooltipTriggerList.forEach(tooltipTriggerEl => new bootstrap.Tooltip(tooltipTriggerEl));
+    
+    // Page-specific initialization
+    const currentPage = window.location.pathname;
+    if (currentPage === '/' || currentPage === '/index.html') {
+        initializeDashboard();
+    } else if (currentPage === '/jobs' || currentPage === '/jobs.html') {
+        initializeJobsPage();
+    } else if (currentPage === '/history' || currentPage === '/history.html') {
+        initializeHistoryPage();
+    }
+    
+    // Common event listeners
+    setupCommonEventListeners();
+});
+
+function setupCommonEventListeners() {
+    // Quick action buttons
+    const runDailyBtn = document.getElementById('runDailyBtn');
+    if (runDailyBtn) {
+        runDailyBtn.addEventListener('click', runDailyJobs);
+    }
+    
+    const runWeeklyBtn = document.getElementById('runWeeklyBtn');
+    if (runWeeklyBtn) {
+        runWeeklyBtn.addEventListener('click', runWeeklyJobs);
+    }
+    
+    const cancelAllBtn = document.getElementById('cancelAllBtn');
+    if (cancelAllBtn) {
+        cancelAllBtn.addEventListener('click', cancelAllJobs);
+    }
+    
+    const reloadBtn = document.getElementById('reloadBtn');
+    if (reloadBtn) {
+        reloadBtn.addEventListener('click', reloadAllJobs);
+    }
+    
+    // Schedule modal save button
+    const saveScheduleBtn = document.getElementById('saveScheduleBtn');
+    if (saveScheduleBtn) {
+        saveScheduleBtn.addEventListener('click', saveJobSchedule);
+    }
+    
+    // Link time input and days checkboxes to cron expression
+    const timeInput = document.getElementById('timeInput');
+    if (timeInput) {
+        timeInput.addEventListener('change', updateCronFromInputs);
+    }
+    
+    const dayCheckboxes = document.querySelectorAll('.day-checkbox');
+    dayCheckboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', updateCronFromInputs);
+    });
+    
+    // Job history refresh button
+    const refreshHistoryBtn = document.getElementById('refreshHistoryBtn');
+    if (refreshHistoryBtn) {
+        refreshHistoryBtn.addEventListener('click', () => loadJobExecutionHistory(currentPage));
+    }
+}
+
+// Dashboard initialization
+function initializeDashboard() {
+    loadJobConfigs();
+    loadDailyJobs();
+    loadWeeklyJobs();
+    loadRecentExecutions();
+    
+    // Set up auto-refresh
+    setInterval(() => {
+        loadRecentExecutions();
+    }, 30000); // Refresh every 30 seconds
+}
+
+// Jobs page initialization
+function initializeJobsPage() {
+    loadJobConfigs();
+    loadDailyJobs();
+    loadWeeklyJobs();
+}
+
+// History page initialization
+function initializeHistoryPage() {
+    loadJobExecutionHistory(0);
+}
+
+// Load job configurations
+function loadJobConfigs() {
+    fetch('/api/schedules')
+        .then(response => response.json())
+        .then(data => {
+            jobConfigs = data;
+            
+            // Update job configuration table if it exists
+            const jobConfigTable = document.getElementById('jobConfigTable');
+            if (jobConfigTable) {
+                populateJobConfigTable(data);
+            }
+        })
+        .catch(error => {
+            console.error('Error loading job configurations:', error);
+            showAlert('danger', 'Failed to load job configurations');
+        });
+}
+
+// Populate job configuration table
+function populateJobConfigTable(configs) {
+    const tableBody = document.getElementById('jobConfigTable');
+    tableBody.innerHTML = '';
+    
+    configs.forEach(config => {
+        const row = document.createElement('tr');
+        
+        // Format days of week
+        const days = formatDaysOfWeek(config.activeDaysOfWeek);
+        
+        // Format last modified date
+        const lastModified = config.lastModifiedDate ? 
+            new Date(config.lastModifiedDate).toLocaleString() + ' by ' + config.lastModifiedBy : 
+            new Date(config.createdDate).toLocaleString() + ' by ' + config.createdBy;
+        
+        row.innerHTML = `
+            <td>${config.jobType.displayName}</td>
+            <td>${config.jobType.category}</td>
+            <td>${config.cronExpression}</td>
+            <td>${days}</td>
+            <td>
+                <span class="badge ${config.enabled ? 'bg-success' : 'bg-danger'}">
+                    ${config.enabled ? 'Enabled' : 'Disabled'}
+                </span>
+            </td>
+            <td>${lastModified}</td>
+            <td>
+                <button class="btn btn-sm btn-primary edit-schedule" data-job-type="${config.jobType}" 
+                        data-job-id="${config.id}" data-bs-toggle="modal" data-bs-target="#scheduleModal">
+                    <i class="bi bi-pencil"></i>
+                </button>
+                <button class="btn btn-sm ${config.enabled ? 'btn-warning' : 'btn-success'} toggle-status" 
+                        data-job-id="${config.id}" data-enabled="${!config.enabled}">
+                    <i class="bi ${config.enabled ? 'bi-pause-fill' : 'bi-play-fill'}"></i>
+                </button>
+            </td>
+        `;
+        
+        tableBody.appendChild(row);
+    });
+    
+    // Add event listeners to table buttons
+    document.querySelectorAll('.edit-schedule').forEach(button => {
+        button.addEventListener('click', (e) => {
+            openScheduleModal(e.target.closest('button').dataset.jobType, 
+                             e.target.closest('button').dataset.jobId);
+        });
+    });
+    
+    document.querySelectorAll('.toggle-status').forEach(button => {
+        button.addEventListener('click', (e) => {
+            toggleJobStatus(e.target.closest('button').dataset.jobId, 
+                           e.target.closest('button').dataset.enabled === 'true');
+        });
+    });
+}
+
+// Load daily jobs
+function loadDailyJobs() {
+    const dailyJobsList = document.getElementById('dailyJobsList');
+    if (!dailyJobsList) return;
+    
+    dailyJobsList.innerHTML = '';
+    
+    // Daily job types: E3, E5, E8, FULL_DAILY
+    const dailyJobs = [
+        { name: 'E3 Job', type: 'E3' },
+        { name: 'E5 Job', type: 'E5' },
+        { name: 'E8 Job', type: 'E8' },
+        { name: 'Full Daily Load', type: 'FULL_DAILY' }
+    ];
+    
+    dailyJobs.forEach(job => {
+        const listItem = document.createElement('div');
+        listItem.className = 'list-group-item d-flex justify-content-between align-items-center';
+        
+        // Find job config if it exists
+        const jobConfig = jobConfigs.find(config => config.jobType === job.type);
+        const statusBadge = jobConfig ? 
+            `<span class="badge ${jobConfig.enabled ? 'bg-success' : 'bg-danger'}">${jobConfig.enabled ? 'Scheduled' : 'Not Scheduled'}</span>` : 
+            '<span class="badge bg-secondary">Not Configured</span>';
+        
+        listItem.innerHTML = `
+            <div>
+                <span class="fw-bold">${job.name}</span>
+                ${statusBadge}
+            </div>
+            <div>
+                <button class="btn btn-sm btn-success run-job" data-job-type="${job.type}">
+                    Run Now
+                </button>
+                <button class="btn btn-sm btn-primary schedule-job" data-job-type="${job.type}" 
+                        data-bs-toggle="modal" data-bs-target="#scheduleModal">
+                    Schedule
+                </button>
+            </div>
+        `;
+        
+        dailyJobsList.appendChild(listItem);
+    });
+    
+    // Add event listeners
+    document.querySelectorAll('.run-job').forEach(button => {
+        button.addEventListener('click', (e) => {
+            runJob(e.target.dataset.jobType);
+        });
+    });
+    
+    document.querySelectorAll('.schedule-job').forEach(button => {
+        button.addEventListener('click', (e) => {
+            openScheduleModal(e.target.dataset.jobType);
+        });
+    });
+}
+
+// Load weekly jobs
+function loadWeeklyJobs() {
+    const weeklyJobsList = document.getElementById('weeklyJobsList');
+    if (!weeklyJobsList) return;
+    
+    weeklyJobsList.innerHTML = '';
+    
+    // Weekly job types: E1, E2, E6, FULL_WEEKLY
+    const weeklyJobs = [
+        { name: 'E1 Job', type: 'E1' },
+        { name: 'E2 Job', type: 'E2' },
+        { name: 'E6 Job', type: 'E6' },
+        { name: 'Full Weekly Load', type: 'FULL_WEEKLY' }
+    ];
+    
+    weeklyJobs.forEach(job => {
+        const listItem = document.createElement('div');
+        listItem.className = 'list-group-item d-flex justify-content-between align-items-center';
+        
+        // Find job config if it exists
+        const jobConfig = jobConfigs.find(config => config.jobType === job.type);
+        const statusBadge = jobConfig ? 
+            `<span class="badge ${jobConfig.enabled ? 'bg-success' : 'bg-danger'}">${jobConfig.enabled ? 'Scheduled' : 'Not Scheduled'}</span>` : 
+            '<span class="badge bg-secondary">Not Configured</span>';
+        
+        listItem.innerHTML = `
+            <div>
+                <span class="fw-bold">${job.name}</span>
+                ${statusBadge}
+            </div>
+            <div>
+                <button class="btn btn-sm btn-success run-job" data-job-type="${job.type}">
+                    Run Now
+                </button>
+                <button class="btn btn-sm btn-primary schedule-job" data-job-type="${job.type}" 
+                        data-bs-toggle="modal" data-bs-target="#scheduleModal">
+                    Schedule
+                </button>
+            </div>
+        `;
+        
+        weeklyJobsList.appendChild(listItem);
+    });
+    
+    // Add event listeners (same as for daily jobs)
+    document.querySelectorAll('.run-job').forEach(button => {
+        button.addEventListener('click', (e) => {
+            runJob(e.target.dataset.jobType);
+        });
+    });
+    
+    document.querySelectorAll('.schedule-job').forEach(button => {
+        button.addEventListener('click', (e) => {
+            openScheduleModal(e.target.dataset.jobType);
+        });
+    });
+}
+
+// Load recent executions
+function loadRecentExecutions() {
+    fetch('/api/status/executions?page=0&size=10')
+        .then(response => response.json())
+        .then(data => {
+            jobExecutions = data.content;
+            
+            // Update recent executions table
+            const recentExecutions = document.getElementById('recentExecutions');
+            if (recentExecutions) {
+                populateExecutionsTable(recentExecutions, data.content);
+            }
+        })
+        .catch(error => {
+            console.error('Error loading recent executions:', error);
+        });
+}
+
+// Load job execution history with pagination
+function loadJobExecutionHistory(page) {
+    currentPage = page;
+    
+    fetch(`/api/status/executions?page=${page}&size=20`)
+        .then(response => response.json())
+        .then(data => {
+            jobExecutions = data.content;
+            totalPages = data.totalPages;
+            
+            // Update executions table
+            const executionsTable = document.getElementById('executionHistoryTable');
+            if (executionsTable) {
+                populateExecutionsTable(executionsTable, data.content, true);
+            }
+            
+            // Update pagination
+            updatePagination(data.number, data.totalPages);
+        })
+        .catch(error => {
+            console.error('Error loading job execution history:', error);
+            showAlert('danger', 'Failed to load job execution history');
+        });
+}
+
+// Populate executions table
+function populateExecutionsTable(tableBody, executions, includeUser = false) {
+    tableBody.innerHTML = '';
+    
+    executions.forEach(execution => {
+        const row = document.createElement('tr');
+        
+        // Calculate duration if start and end times exist
+        let duration = '';
+        if (execution.startTime && execution.endTime) {
+            const start = new Date(execution.startTime);
+            const end = new Date(execution.endTime);
+            const durationMs = end - start;
+            duration = formatDuration(durationMs);
+        }
+        
+        // Set row class based on status
+        if (execution.status === 'RUNNING') {
+            row.className = 'table-primary';
+        } else if (execution.status === 'FAILED') {
+            row.className = 'table-danger';
+        } else if (execution.status === 'COMPLETED') {
+            row.className = 'table-success';
+        }
+        
+        // Format times
+        const startTime = execution.startTime ? new Date(execution.startTime).toLocaleString() : '';
+        const endTime = execution.endTime ? new Date(execution.endTime).toLocaleString() : '';
+        
+        let rowHtml = `
+            <td>${execution.id}</td>
+            <td>${execution.jobType.displayName}</td>
+            <td>
+                <span class="badge ${getStatusBadgeClass(execution.status)}">
+                    ${execution.status}
+                </span>
+            </td>
+            <td>${startTime}</td>
+            <td>${endTime}</td>
+        `;
+        
+        // Add duration column in history view
+        if (includeUser) {
+            rowHtml += `<td>${duration}</td>`;
+        }
+        
+        rowHtml += `
+            <td>${execution.triggerType}</td>
+        `;
+        
+        // Add user column in history view
+        if (includeUser) {
+            rowHtml += `<td>${execution.userId || ''}</td>`;
+        }
+        
+        rowHtml += `
+            <td>
+                <button class="btn btn-sm btn-info view-details" data-execution-id="${execution.id}" 
+                        data-bs-toggle="modal" data-bs-target="#jobDetailsModal">
+                    <i class="bi bi-eye"></i> Details
+                </button>
+            </td>
+        `;
+        
+        row.innerHTML = rowHtml;
+        tableBody.appendChild(row);
+    });
+    
+    // Add event listeners to view details buttons
+    document.querySelectorAll('.view-details').forEach(button => {
+        button.addEventListener('click', (e) => {
+            showJobDetails(e.target.closest('button').dataset.executionId);
+        });
+    });
+}
+
+// Update pagination controls
+function updatePagination(currentPage, totalPages) {
+    const paginationElement = document.getElementById('historyPagination');
+    if (!paginationElement) return;
+    
+    paginationElement.innerHTML = '';
+    
+    // Previous button
+    const prevItem = document.createElement('li');
+    prevItem.className = `page-item ${currentPage === 0 ? 'disabled' : ''}`;
+    
+    const prevLink = document.createElement('a');
+    prevLink.className = 'page-link';
+    prevLink.href = '#';
+    prevLink.innerHTML = '&laquo;';
+    prevLink.addEventListener('click', (e) => {
+        e.preventDefault();
+        if (currentPage > 0) {
+            loadJobExecutionHistory(currentPage - 1);
+        }
+    });
+    
+    prevItem.appendChild(prevLink);
+    paginationElement.appendChild(prevItem);
+    
+    // Page buttons
+    const maxPages = 5;
+    const startPage = Math.max(0, Math.min(currentPage - Math.floor(maxPages / 2), totalPages - maxPages));
+    const endPage = Math.min(startPage + maxPages, totalPages);
+    
+    for (let i = startPage; i < endPage; i++) {
+        const pageItem = document.createElement('li');
+        pageItem.className = `page-item ${i === currentPage ? 'active' : ''}`;
+        
+        const pageLink = document.createElement('a');
+        pageLink.className = 'page-link';
+        pageLink.href = '#';
+        pageLink.textContent = i + 1;
+        pageLink.addEventListener('click', (e) => {
+            e.preventDefault();
+            loadJobExecutionHistory(i);
+        });
+        
+        pageItem.appendChild(pageLink);
+        paginationElement.appendChild(pageItem);
+    }
+    
+    // Next button
+    const nextItem = document.createElement('li');
+    nextItem.className = `page-item ${currentPage >= totalPages - 1 ? 'disabled' : ''}`;
+    
+    const nextLink = document.createElement('a');
+    nextLink.className = 'page-link';
+    nextLink.href = '#';
+    nextLink.innerHTML = '&raquo;';
+    nextLink.addEventListener('click', (e) => {
+        e.preventDefault();
+        if (currentPage < totalPages - 1) {
+            loadJobExecutionHistory(currentPage + 1);
+        }
+    });
+    
+    nextItem.appendChild(nextLink);
+    paginationElement.appendChild(nextItem);
+}
+
+// Open schedule modal
+function openScheduleModal(jobType, jobId = null) {
+    // Reset form
+    document.getElementById('scheduleForm').reset();
+    
+    // Set job type
+    document.getElementById('jobTypeInput').value = jobType;
+    
+    // If jobId is provided, load existing configuration
+    if (jobId) {
+        const jobConfig = jobConfigs.find(config => config.id == jobId);
+        if (jobConfig) {
+            // Set time from cron expression
+            const cronParts = jobConfig.cronExpression.split(' ');
+            if (cronParts.length >= 6) {
+                const hour = cronParts[2];
+                const minute = cronParts[1];
+                
+                if (hour !== '*' && minute !== '*') {
+                    const formattedHour = hour.padStart(2, '0');
+                    const formattedMinute = minute.padStart(2, '0');
+                    document.getElementById('timeInput').value = `${formattedHour}:${formattedMinute}`;
+                }
+            }
+            
+            // Set days of week
+            if (jobConfig.activeDaysOfWeek) {
+                jobConfig.activeDaysOfWeek.forEach(day => {
+                    const checkbox = document.getElementById(`day${day}`);
+                    if (checkbox) {
+                        checkbox.checked = true;
+                    }
+                });
+            }
+            
+            // Set cron expression
+            document.getElementById('cronExpressionInput').value = jobConfig.cronExpression;
+            
+            // Set enabled status
+            document.getElementById('enabledCheckbox').checked = jobConfig.enabled;
+        }
+    } else {
+        // Default values for new schedule
+        document.getElementById('timeInput').value = '00:00';
+        document.getElementById('enabledCheckbox').checked = true;
+        updateCronFromInputs();
+    }
+}
+
+// Update cron expression from time and days inputs
+function updateCronFromInputs() {
+    const timeInput = document.getElementById('timeInput');
+    if (!timeInput.value) return;
+    
+    const [hours, minutes] = timeInput.value.split(':');
+    
+    // Get selected days
+    const selectedDays = [];
+    document.querySelectorAll('.day-checkbox:checked').forEach(checkbox => {
+        selectedDays.push(parseInt(checkbox.value));
+    });
+    
+    // Create cron expression
+    let cronExpression;
+    if (selectedDays.length === 0) {
+        // If no days selected, run every day
+        cronExpression = `0 ${minutes} ${hours} * * *`;
+    } else {
+        // If days selected, run only on those days
+        cronExpression = `0 ${minutes} ${hours} * * ${selectedDays.join(',')}`;
+    }
+    
+    document.getElementById('cronExpressionInput').value = cronExpression;
+}
+
+// Save job schedule
+function saveJobSchedule() {
+    const jobType = document.getElementById('jobTypeInput').value;
+    const time = document.getElementById('timeInput').value;
+    const cronExpression = document.getElementById('cronExpressionInput').value;
+    const enabled = document.getElementById('enabledCheckbox').checked;
+    
+    // Get selected days
+    const selectedDays = [];
+    document.querySelectorAll('.day-checkbox:checked').forEach(checkbox => {
+        selectedDays.push(parseInt(checkbox.value));
+    });
+    
+    // Prepare data
+    const formData = new URLSearchParams();
+    formData.append('jobType', jobType);
+    formData.append('time', time);
+    selectedDays.forEach(day => formData.append('days', day));
+    formData.append('enabled', enabled);
+    
+    // Save schedule
+    fetch('/api/schedules/cron', {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded'
+            }
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Failed to save schedule');
+            }
+            return response.json();
+        })
+        .then(data => {
+            // Close modal
+            const modal = bootstrap.Modal.getInstance(document.getElementById('scheduleModal'));
+            modal.hide();
+            
+            // Reload job configurations
+            loadJobConfigs();
+            loadDailyJobs();
+            loadWeeklyJobs();
+            
+            showAlert('success', 'Job schedule saved successfully');
+        })
+        .catch(error => {
+            console.error('Error saving job schedule:', error);
+            showAlert('danger', 'Failed to save job schedule');
+        });
+}
+
+// Toggle job status (enable/disable)
+function toggleJobStatus(jobId, enabled) {
+    fetch(`/api/schedules/${jobId}/toggle?enabled=${enabled}`, {
+            method: 'PUT'
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Failed to toggle job status');
+            }
+            return response.text();
+        })
+        .then(data => {
+            // Reload job configurations
+            loadJobConfigs();
+            loadDailyJobs();
+            loadWeeklyJobs();
+            
+            showAlert('success', `Job ${enabled ? 'enabled' : 'disabled'} successfully`);
+        })
+        .catch(error => {
+            console.error('Error toggling job status:', error);
+            showAlert('danger', 'Failed to toggle job status');
+        });
+}
+
+// Run a specific job
+function runJob(jobType) {
+    fetch(`/api/jobs/run/${jobType}`, {
+            method: 'POST'
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Failed to run job');
+            }
+            return response.text();
+        })
+        .then(data => {
+            showAlert('success', data);
+            
+            // Reload recent executions
+            setTimeout(() => {
+                loadRecentExecutions();
+            }, 1000);
+        })
+        .catch(error => {
+            console.error(`Error running job ${jobType}:`, error);
+            showAlert('danger', `Failed to run job ${jobType}`);
+        });
+}
+
+// Run all daily jobs
+function runDailyJobs() {
+    fetch('/api/jobs/run/daily', {
+            method: 'POST'
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Failed to run daily jobs');
+            }
+            return response.text();
+        })
+        .then(data => {
+            showAlert('success', data);
+            
+            // Reload recent executions
+            setTimeout(() => {
+                loadRecentExecutions();
+            }, 1000);
+        })
+        .catch(error => {
+            console.error('Error running daily jobs:', error);
+            showAlert('danger', 'Failed to run daily jobs');
+        });
+}
+
+// Run all weekly jobs
+function runWeeklyJobs() {
+    fetch('/api/jobs/run/weekly', {
+            method: 'POST'
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Failed to run weekly jobs');
+            }
+            return response.text();
+        })
+        .then(data => {
+            showAlert('success', data);
+            
+            // Reload recent executions
+            setTimeout(() => {
+                loadRecentExecutions();
+            }, 1000);
+        })
+        .catch(error => {
+            console.error('Error running weekly jobs:', error);
+            showAlert('danger', 'Failed to run weekly jobs');
+        });
+}
+
+// Cancel all scheduled jobs
+function cancelAllJobs() {
+    if (!confirm('Are you sure you want to cancel all scheduled jobs?')) {
+        return;
+    }
+    
+    fetch('/api/jobs/cancel-all', {
+            method: 'POST'
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Failed to cancel jobs');
+            }
+            return response.text();
+        })
+        .then(data => {
+            showAlert('success', data);
+            
+            // Reload job configurations
+            loadJobConfigs();
+            loadDailyJobs();
+            loadWeeklyJobs();
+        })
+        .catch(error => {
+            console.error('Error cancelling jobs:', error);
+            showAlert('danger', 'Failed to cancel jobs');
+        });
+}
+
+// Reload all job schedules
+function reloadAllJobs() {
+    fetch('/api/jobs/reload', {
+            method: 'POST'
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Failed to reload jobs');
+            }
+            return response.text();
+        })
+        .then(data => {
+            showAlert('success', data);
+            
+            // Reload job configurations
+            loadJobConfigs();
+            loadDailyJobs();
+            loadWeeklyJobs();
+        })
+        .catch(error => {
+            console.error('Error reloading jobs:', error);
+            showAlert('danger', 'Failed to reload jobs');
+        });
+}
+
+// Show job execution details
+function showJobDetails(executionId) {
+    fetch(`/api/jobs/execution/${executionId}`)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Failed to load job details');
+            }
+            return response.json();
+        })
+        .then(data => {
+            // Populate modal with job details
+            document.getElementById('detailsJobType').textContent = data.jobType.displayName;
+            document.getElementById('detailsStatus').textContent = data.status;
+            document.getElementById('detailsTrigger').textContent = data.triggerType;
+            
+            const startTime = data.startTime ? new Date(data.startTime).toLocaleString() : 'N/A';
+            const endTime = data.endTime ? new Date(data.endTime).toLocaleString() : 'N/A';
+            
+            document.getElementById('detailsStartTime').textContent = startTime;
+            document.getElementById('detailsEndTime').textContent = endTime;
+            
+            document.getElementById('detailsLogOutput').textContent = data.logOutput || 'No log output available';
+            
+            // Show/hide error details
+            const errorSection = document.getElementById('errorDetailsSection');
+            if (data.errorDetails) {
+                errorSection.style.display = 'block';
+                document.getElementById('detailsErrorOutput').textContent = data.errorDetails;
+            } else {
+                errorSection.style.display = 'none';
+            }
+        })
+        .catch(error => {
+            console.error('Error loading job details:', error);
+            showAlert('danger', 'Failed to load job details');
+        });
+}
+
+// Helper function to show alerts
+function showAlert(type, message) {
+    // Create alert element
+    const alertElement = document.createElement('div');
+    alertElement.className = `alert alert-${type} alert-dismissible fade show`;
+    alertElement.setAttribute('role', 'alert');
+    
+    alertElement.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    `;
+    
+    // Find or create alert container
+    let alertContainer = document.querySelector('.alert-container');
+    if (!alertContainer) {
+        alertContainer = document.createElement('div');
+        alertContainer.className = 'alert-container position-fixed top-0 end-0 p-3';
+        document.body.appendChild(alertContainer);
+    }
+    
+    // Add alert to container
+    alertContainer.appendChild(alertElement);
+    
+    // Auto-dismiss after 5 seconds
+    setTimeout(() => {
+        alertElement.classList.remove('show');
+        setTimeout(() => {
+            alertElement.remove();
+        }, 150);
+    }, 5000);
+}
+
+// Helper function to format duration
+function formatDuration(durationMs) {
+    const seconds = Math.floor(durationMs / 1000);
+    
+    if (seconds < 60) {
+        return `${seconds}s`;
+    }
+    
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    
+    if (minutes < 60) {
+        return `${minutes}m ${remainingSeconds}s`;
+    }
+    
+    const hours = Math.floor(minutes / 60);
+    const remainingMinutes = minutes % 60;
+    
+    return `${hours}h ${remainingMinutes}m ${remainingSeconds}s`;
+}
+
+// Helper function to format days of week
+function formatDaysOfWeek(days) {
+    if (!days || days.length === 0) {
+        return 'Every day';
+    }
+    
+    const dayNames = ['', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    
+    if (days.length === 7) {
+        return 'Every day';
+    }
+    
+    return days.map(day => dayNames[day]).join(', ');
+}
+
+// Helper function to get badge class for job status
+function getStatusBadgeClass(status) {
+    switch (status) {
+        case 'RUNNING':
+            return 'bg-primary';
+        case 'COMPLETED':
+            return 'bg-success';
+        case 'FAILED':
+            return 'bg-danger';
+        case 'CANCELLED':
+            return 'bg-warning';
+        case 'SCHEDULED':
+            return 'bg-info';
+        default:
+            return 'bg-secondary';
+    }
+}
