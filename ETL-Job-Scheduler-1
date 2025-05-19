@@ -1,0 +1,1599 @@
+# ETL Job Scheduler & Management UI
+
+## Project Structure
+
+```
+etl-scheduler/
+├── src/
+│   ├── main/
+│   │   ├── java/
+│   │   │   └── com/
+│   │   │       └── example/
+│   │   │           └── etlscheduler/
+│   │   │               ├── EtlSchedulerApplication.java
+│   │   │               ├── config/
+│   │   │               │   ├── SecurityConfig.java
+│   │   │               │   ├── SchedulerConfig.java
+│   │   │               │   └── WebClientConfig.java
+│   │   │               ├── controller/
+│   │   │               │   ├── JobController.java
+│   │   │               │   ├── ScheduleController.java
+│   │   │               │   └── StatusController.java
+│   │   │               ├── model/
+│   │   │               │   ├── JobConfig.java
+│   │   │               │   ├── JobExecution.java 
+│   │   │               │   ├── JobStatus.java
+│   │   │               │   └── JobType.java
+│   │   │               ├── repository/
+│   │   │               │   ├── JobConfigRepository.java
+│   │   │               │   └── JobExecutionRepository.java
+│   │   │               ├── service/
+│   │   │               │   ├── JobExecutionService.java
+│   │   │               │   ├── JobSchedulerService.java
+│   │   │               │   └── EtlServiceClient.java
+│   │   │               └── util/
+│   │   │                   └── CronUtils.java
+│   │   └── resources/
+│   │       ├── application.properties
+│   │       ├── application-dev.properties
+│   │       ├── application-prod.properties
+│   │       ├── static/
+│   │       │   ├── css/
+│   │       │   │   └── main.css
+│   │       │   └── js/
+│   │       │       └── scheduler.js
+│   │       └── templates/
+│   │           ├── index.html
+│   │           ├── jobs.html
+│   │           └── history.html
+│   └── test/
+│       └── java/
+│           └── com/
+│               └── example/
+│                   └── etlscheduler/
+│                       ├── controller/
+│                       │   └── JobControllerTest.java
+│                       └── service/
+│                           └── JobSchedulerServiceTest.java
+├── Dockerfile
+├── openshift/
+│   ├── deployment.yaml
+│   ├── service.yaml
+│   └── route.yaml
+├── pom.xml
+└── README.md
+```
+
+## Core Files Implementation
+
+### 1. pom.xml
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>2.7.13</version>
+        <relativePath/>
+    </parent>
+    <groupId>com.example</groupId>
+    <artifactId>etl-scheduler</artifactId>
+    <version>0.0.1-SNAPSHOT</version>
+    <name>etl-scheduler</name>
+    <description>ETL Job Scheduler and Management UI</description>
+
+    <properties>
+        <java.version>11</java.version>
+        <oracle-database.version>21.7.0.0</oracle-database.version>
+    </properties>
+
+    <dependencies>
+        <!-- Spring Boot Starters -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-thymeleaf</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-webflux</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+        
+        <!-- Security -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-oauth2-client</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
+        </dependency>
+        
+        <!-- Oracle Database -->
+        <dependency>
+            <groupId>com.oracle.database.jdbc</groupId>
+            <artifactId>ojdbc8</artifactId>
+            <version>${oracle-database.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.oracle.database.ha</groupId>
+            <artifactId>ons</artifactId>
+            <version>${oracle-database.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.oracle.database.jdbc</groupId>
+            <artifactId>ucp</artifactId>
+            <version>${oracle-database.version}</version>
+        </dependency>
+        
+        <!-- Utils -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-devtools</artifactId>
+            <scope>runtime</scope>
+            <optional>true</optional>
+        </dependency>
+        
+        <!-- Testing -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <excludes>
+                        <exclude>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                        </exclude>
+                    </excludes>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>
+```
+
+### 2. Main Application Class
+```java
+package com.example.etlscheduler;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.scheduling.annotation.EnableScheduling;
+
+@SpringBootApplication
+@EnableScheduling
+public class EtlSchedulerApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(EtlSchedulerApplication.class, args);
+    }
+}
+```
+
+### 3. Configuration Classes
+
+#### a. SecurityConfig.java
+```java
+package com.example.etlscheduler.config;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.web.SecurityFilterChain;
+
+@Configuration
+@EnableWebSecurity
+public class SecurityConfig {
+
+    @Value("${spring.security.oauth2.resourceserver.jwt.issuer-uri}")
+    private String issuerUri;
+
+    @Bean
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+        http
+            .authorizeRequests(authorizeRequests ->
+                authorizeRequests
+                    .antMatchers("/css/**", "/js/**", "/images/**", "/webjars/**", "/actuator/health").permitAll()
+                    .anyRequest().authenticated()
+            )
+            .oauth2Login(oauth2Login ->
+                oauth2Login
+                    .defaultSuccessUrl("/", true)
+            )
+            .oauth2ResourceServer(oauth2 -> oauth2.jwt())
+            .csrf();
+        
+        return http.build();
+    }
+}
+```
+
+#### b. WebClientConfig.java
+```java
+package com.example.etlscheduler.config;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.web.reactive.function.client.WebClient;
+
+@Configuration
+public class WebClientConfig {
+
+    @Value("${etl.service.base-url}")
+    private String etlServiceBaseUrl;
+
+    @Bean
+    public WebClient etlServiceWebClient() {
+        return WebClient.builder()
+                .baseUrl(etlServiceBaseUrl)
+                .build();
+    }
+}
+```
+
+#### c. SchedulerConfig.java
+```java
+package com.example.etlscheduler.config;
+
+import com.example.etlscheduler.service.JobSchedulerService;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.scheduling.TaskScheduler;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
+
+@Configuration
+@RequiredArgsConstructor
+@Slf4j
+public class SchedulerConfig {
+
+    private final JobSchedulerService jobSchedulerService;
+
+    @Bean
+    public TaskScheduler taskScheduler() {
+        ThreadPoolTaskScheduler scheduler = new ThreadPoolTaskScheduler();
+        scheduler.setPoolSize(5);
+        scheduler.setThreadNamePrefix("etl-scheduler-");
+        scheduler.setErrorHandler(t -> log.error("Error occurred during task execution", t));
+        scheduler.setWaitForTasksToCompleteOnShutdown(true);
+        scheduler.setAwaitTerminationSeconds(60);
+        return scheduler;
+    }
+    
+    @Bean(initMethod = "initializeScheduledTasks")
+    public JobSchedulerInitializer jobSchedulerInitializer() {
+        return new JobSchedulerInitializer(jobSchedulerService);
+    }
+    
+    @RequiredArgsConstructor
+    public static class JobSchedulerInitializer {
+        private final JobSchedulerService jobSchedulerService;
+        
+        public void initializeScheduledTasks() {
+            jobSchedulerService.loadAndScheduleAllJobs();
+        }
+    }
+}
+```
+
+### 4. Model Classes
+
+#### a. JobType.java
+```java
+package com.example.etlscheduler.model;
+
+public enum JobType {
+    // Daily jobs
+    E3("e3", "Daily", "E3 Job"),
+    E5("e5", "Daily", "E5 Job"),
+    E8("e8", "Daily", "E8 Job"),
+    FULL_DAILY("full-daily", "Daily", "Full Daily Load"),
+    
+    // Weekly jobs
+    E1("e1", "Weekly", "E1 Job"),
+    E2("e2", "Weekly", "E2 Job"),
+    E6("e6", "Weekly", "E6 Job"),
+    FULL_WEEKLY("full-weekly", "Weekly", "Full Weekly Load");
+
+    private final String endpoint;
+    private final String category;
+    private final String displayName;
+
+    JobType(String endpoint, String category, String displayName) {
+        this.endpoint = endpoint;
+        this.category = category;
+        this.displayName = displayName;
+    }
+
+    public String getEndpoint() {
+        return endpoint;
+    }
+
+    public String getCategory() {
+        return category;
+    }
+
+    public String getDisplayName() {
+        return displayName;
+    }
+    
+    public boolean isDaily() {
+        return "Daily".equals(category);
+    }
+    
+    public boolean isWeekly() {
+        return "Weekly".equals(category);
+    }
+}
+```
+
+#### b. JobStatus.java
+```java
+package com.example.etlscheduler.model;
+
+public enum JobStatus {
+    SCHEDULED,
+    RUNNING,
+    COMPLETED,
+    FAILED,
+    CANCELLED
+}
+```
+
+#### c. JobConfig.java
+```java
+package com.example.etlscheduler.model;
+
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+import javax.persistence.*;
+import java.time.LocalDateTime;
+import java.util.Set;
+
+@Entity
+@Table(name = "JOB_CONFIG")
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+public class JobConfig {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "JOB_CONFIG_SEQ")
+    @SequenceGenerator(name = "JOB_CONFIG_SEQ", sequenceName = "JOB_CONFIG_SEQ", allocationSize = 1)
+    private Long id;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "JOB_TYPE", nullable = false)
+    private JobType jobType;
+
+    @Column(name = "CRON_EXPRESSION", nullable = false)
+    private String cronExpression;
+
+    @ElementCollection
+    @CollectionTable(name = "JOB_CONFIG_DAYS", joinColumns = @JoinColumn(name = "JOB_CONFIG_ID"))
+    @Column(name = "DAY_OF_WEEK")
+    private Set<Integer> activeDaysOfWeek;
+
+    @Column(name = "ENABLED", nullable = false)
+    private boolean enabled;
+
+    @Column(name = "CREATED_BY", nullable = false)
+    private String createdBy;
+
+    @Column(name = "CREATED_DATE", nullable = false)
+    private LocalDateTime createdDate;
+
+    @Column(name = "LAST_MODIFIED_BY")
+    private String lastModifiedBy;
+
+    @Column(name = "LAST_MODIFIED_DATE")
+    private LocalDateTime lastModifiedDate;
+}
+```
+
+#### d. JobExecution.java
+```java
+package com.example.etlscheduler.model;
+
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+import javax.persistence.*;
+import java.time.LocalDateTime;
+
+@Entity
+@Table(name = "JOB_EXECUTION")
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+public class JobExecution {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "JOB_EXECUTION_SEQ")
+    @SequenceGenerator(name = "JOB_EXECUTION_SEQ", sequenceName = "JOB_EXECUTION_SEQ", allocationSize = 1)
+    private Long id;
+
+    @Column(name = "JOB_CONFIG_ID")
+    private Long jobConfigId;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "JOB_TYPE", nullable = false)
+    private JobType jobType;
+
+    @Column(name = "TRIGGER_TYPE", nullable = false)
+    private String triggerType; // SCHEDULED, MANUAL
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "STATUS", nullable = false)
+    private JobStatus status;
+
+    @Column(name = "START_TIME")
+    private LocalDateTime startTime;
+
+    @Column(name = "END_TIME")
+    private LocalDateTime endTime;
+
+    @Column(name = "USER_ID")
+    private String userId;
+
+    @Lob
+    @Column(name = "LOG_OUTPUT")
+    private String logOutput;
+    
+    @Lob
+    @Column(name = "ERROR_DETAILS")
+    private String errorDetails;
+}
+```
+
+### 5. Repository Classes
+
+#### a. JobConfigRepository.java
+```java
+package com.example.etlscheduler.repository;
+
+import com.example.etlscheduler.model.JobConfig;
+import com.example.etlscheduler.model.JobType;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
+import java.util.List;
+import java.util.Optional;
+
+@Repository
+public interface JobConfigRepository extends JpaRepository<JobConfig, Long> {
+    List<JobConfig> findByEnabledTrue();
+    Optional<JobConfig> findByJobType(JobType jobType);
+    List<JobConfig> findByJobTypeIn(List<JobType> jobTypes);
+}
+```
+
+#### b. JobExecutionRepository.java
+```java
+package com.example.etlscheduler.repository;
+
+import com.example.etlscheduler.model.JobExecution;
+import com.example.etlscheduler.model.JobStatus;
+import com.example.etlscheduler.model.JobType;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
+import java.time.LocalDateTime;
+import java.util.List;
+
+@Repository
+public interface JobExecutionRepository extends JpaRepository<JobExecution, Long> {
+    Page<JobExecution> findAllByOrderByStartTimeDesc(Pageable pageable);
+    List<JobExecution> findByJobTypeAndStatusOrderByStartTimeDesc(JobType jobType, JobStatus status, Pageable pageable);
+    List<JobExecution> findByStartTimeBetweenOrderByStartTimeDesc(LocalDateTime start, LocalDateTime end);
+    List<JobExecution> findByStatusAndStartTimeBefore(JobStatus status, LocalDateTime time);
+}
+```
+
+### 6. Service Classes
+
+#### a. EtlServiceClient.java
+```java
+package com.example.etlscheduler.service;
+
+import com.example.etlscheduler.model.JobType;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+import org.springframework.web.reactive.function.client.WebClient;
+import reactor.core.publisher.Mono;
+
+import java.time.Duration;
+
+@Service
+@RequiredArgsConstructor
+@Slf4j
+public class EtlServiceClient {
+
+    private final WebClient etlServiceWebClient;
+    private static final Duration DEFAULT_TIMEOUT = Duration.ofMinutes(5);
+
+    public Mono<String> triggerJob(JobType jobType) {
+        String endpoint = "/api/jobs/" + jobType.getEndpoint();
+        log.info("Triggering ETL job: {} at endpoint: {}", jobType, endpoint);
+        
+        return etlServiceWebClient
+                .post()
+                .uri(endpoint)
+                .retrieve()
+                .bodyToMono(String.class)
+                .timeout(DEFAULT_TIMEOUT)
+                .doOnNext(response -> log.info("Job {} triggered successfully with response: {}", jobType, response))
+                .doOnError(error -> log.error("Error triggering job {}: {}", jobType, error.getMessage()));
+    }
+    
+    public Mono<String> getJobStatus(String jobId) {
+        return etlServiceWebClient
+                .get()
+                .uri("/api/jobs/status/" + jobId)
+                .retrieve()
+                .bodyToMono(String.class)
+                .timeout(Duration.ofSeconds(30))
+                .doOnError(error -> log.error("Error fetching job status for ID {}: {}", jobId, error.getMessage()));
+    }
+}
+```
+
+#### b. JobExecutionService.java
+```java
+package com.example.etlscheduler.service;
+
+import com.example.etlscheduler.model.JobExecution;
+import com.example.etlscheduler.model.JobStatus;
+import com.example.etlscheduler.model.JobType;
+import com.example.etlscheduler.repository.JobExecutionRepository;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDateTime;
+import java.util.Optional;
+
+@Service
+@RequiredArgsConstructor
+@Slf4j
+public class JobExecutionService {
+
+    private final JobExecutionRepository jobExecutionRepository;
+    private final EtlServiceClient etlServiceClient;
+
+    @Transactional
+    public JobExecution createJobExecution(JobType jobType, Long jobConfigId, String triggerType) {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        String userId = authentication != null ? authentication.getName() : "system";
+        
+        JobExecution jobExecution = JobExecution.builder()
+                .jobType(jobType)
+                .jobConfigId(jobConfigId)
+                .triggerType(triggerType)
+                .status(JobStatus.RUNNING)
+                .startTime(LocalDateTime.now())
+                .userId(userId)
+                .build();
+                
+        return jobExecutionRepository.save(jobExecution);
+    }
+    
+    @Transactional
+    public JobExecution updateJobExecutionStatus(Long jobExecutionId, JobStatus status, String logOutput, String errorDetails) {
+        return jobExecutionRepository.findById(jobExecutionId)
+                .map(execution -> {
+                    execution.setStatus(status);
+                    if (status == JobStatus.COMPLETED || status == JobStatus.FAILED) {
+                        execution.setEndTime(LocalDateTime.now());
+                    }
+                    execution.setLogOutput(logOutput);
+                    execution.setErrorDetails(errorDetails);
+                    return jobExecutionRepository.save(execution);
+                })
+                .orElseThrow(() -> new IllegalArgumentException("Job execution not found with id: " + jobExecutionId));
+    }
+    
+    @Transactional(readOnly = true)
+    public Page<JobExecution> getAllJobExecutions(Pageable pageable) {
+        return jobExecutionRepository.findAllByOrderByStartTimeDesc(pageable);
+    }
+    
+    @Transactional(readOnly = true)
+    public Optional<JobExecution> getJobExecution(Long id) {
+        return jobExecutionRepository.findById(id);
+    }
+    
+    @Transactional
+    public void cleanupStaleJobExecutions() {
+        // Find jobs that have been running for more than 24 hours
+        LocalDateTime cutoffTime = LocalDateTime.now().minusHours(24);
+        jobExecutionRepository.findByStatusAndStartTimeBefore(JobStatus.RUNNING, cutoffTime)
+                .forEach(execution -> {
+                    log.warn("Found stale job execution: {}", execution.getId());
+                    execution.setStatus(JobStatus.FAILED);
+                    execution.setEndTime(LocalDateTime.now());
+                    execution.setErrorDetails("Job timed out after 24 hours");
+                    jobExecutionRepository.save(execution);
+                });
+    }
+}
+```
+
+#### c. JobSchedulerService.java
+```java
+package com.example.etlscheduler.service;
+
+import com.example.etlscheduler.model.JobConfig;
+import com.example.etlscheduler.model.JobExecution;
+import com.example.etlscheduler.model.JobStatus;
+import com.example.etlscheduler.model.JobType;
+import com.example.etlscheduler.repository.JobConfigRepository;
+import com.example.etlscheduler.util.CronUtils;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.scheduling.TaskScheduler;
+import org.springframework.scheduling.support.CronTrigger;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import reactor.core.publisher.Mono;
+
+import java.time.LocalDateTime;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ScheduledFuture;
+import java.util.stream.Collectors;
+
+@Service
+@Slf4j
+public class JobSchedulerService {
+
+    private final JobConfigRepository jobConfigRepository;
+    private final JobExecutionService jobExecutionService;
+    private final EtlServiceClient etlServiceClient;
+    private final TaskScheduler taskScheduler;
+    private final Map<Long, ScheduledFuture<?>> scheduledTasks = new ConcurrentHashMap<>();
+
+    @Autowired
+    public JobSchedulerService(
+            JobConfigRepository jobConfigRepository,
+            JobExecutionService jobExecutionService,
+            EtlServiceClient etlServiceClient,
+            TaskScheduler taskScheduler) {
+        this.jobConfigRepository = jobConfigRepository;
+        this.jobExecutionService = jobExecutionService;
+        this.etlServiceClient = etlServiceClient;
+        this.taskScheduler = taskScheduler;
+    }
+
+    public void loadAndScheduleAllJobs() {
+        log.info("Loading and scheduling all enabled jobs");
+        cancelAllJobs();
+        
+        List<JobConfig> enabledJobs = jobConfigRepository.findByEnabledTrue();
+        enabledJobs.forEach(this::scheduleJob);
+        
+        log.info("Scheduled {} jobs", enabledJobs.size());
+    }
+    
+    @Transactional
+    public JobConfig saveJobConfig(JobConfig jobConfig, String username) {
+        boolean isNew = (jobConfig.getId() == null);
+        
+        // Check if we already have a configuration for this job type
+        if (isNew) {
+            Optional<JobConfig> existingConfig = jobConfigRepository.findByJobType(jobConfig.getJobType());
+            if (existingConfig.isPresent()) {
+                JobConfig existing = existingConfig.get();
+                existing.setCronExpression(jobConfig.getCronExpression());
+                existing.setActiveDaysOfWeek(jobConfig.getActiveDaysOfWeek());
+                existing.setEnabled(jobConfig.isEnabled());
+                existing.setLastModifiedBy(username);
+                existing.setLastModifiedDate(LocalDateTime.now());
+                
+                jobConfig = jobConfigRepository.save(existing);
+            } else {
+                jobConfig.setCreatedBy(username);
+                jobConfig.setCreatedDate(LocalDateTime.now());
+                jobConfig = jobConfigRepository.save(jobConfig);
+            }
+        } else {
+            JobConfig existing = jobConfigRepository.findById(jobConfig.getId())
+                    .orElseThrow(() -> new IllegalArgumentException("Job config not found with id: " + jobConfig.getId()));
+            existing.setCronExpression(jobConfig.getCronExpression());
+            existing.setActiveDaysOfWeek(jobConfig.getActiveDaysOfWeek());
+            existing.setEnabled(jobConfig.isEnabled());
+            existing.setLastModifiedBy(username);
+            existing.setLastModifiedDate(LocalDateTime.now());
+            
+            jobConfig = jobConfigRepository.save(existing);
+        }
+        
+        // Cancel existing schedule if any
+        cancelJob(jobConfig.getId());
+        
+        // Schedule the job if enabled
+        if (jobConfig.isEnabled()) {
+            scheduleJob(jobConfig);
+        }
+        
+        return jobConfig;
+    }
+    
+    public void cancelJob(Long jobConfigId) {
+        ScheduledFuture<?> scheduledTask = scheduledTasks.get(jobConfigId);
+        if (scheduledTask != null) {
+            boolean cancelled = scheduledTask.cancel(false);
+            log.info("Cancelled job with ID {}: {}", jobConfigId, cancelled);
+            scheduledTasks.remove(jobConfigId);
+        }
+    }
+    
+    public void cancelAllJobs() {
+        log.info("Cancelling all scheduled jobs");
+        scheduledTasks.forEach((id, future) -> future.cancel(false));
+        scheduledTasks.clear();
+    }
+    
+    private void scheduleJob(JobConfig jobConfig) {
+        try {
+            CronTrigger cronTrigger = new CronTrigger(jobConfig.getCronExpression());
+            
+            ScheduledFuture<?> scheduledTask = taskScheduler.schedule(
+                    () -> executeJob(jobConfig),
+                    triggerContext -> {
+                        // Check if today is one of the active days
+                        if (!isActiveDay(jobConfig)) {
+                            return null; // Don't run on inactive days
+                        }
+                        return cronTrigger.nextExecutionTime(triggerContext);
+                    });
+            
+            scheduledTasks.put(jobConfig.getId(), scheduledTask);
+            log.info("Scheduled job: {} with cron: {}", jobConfig.getJobType(), jobConfig.getCronExpression());
+        } catch (Exception e) {
+            log.error("Error scheduling job: " + jobConfig.getJobType(), e);
+        }
+    }
+    
+    private boolean isActiveDay(JobConfig jobConfig) {
+        if (jobConfig.getActiveDaysOfWeek() == null || jobConfig.getActiveDaysOfWeek().isEmpty()) {
+            return true; // If no specific days set, run every day
+        }
+        
+        // Get current day of week (1=Monday, 7=Sunday)
+        int dayOfWeek = LocalDateTime.now().getDayOfWeek().getValue();
+        return jobConfig.getActiveDaysOfWeek().contains(dayOfWeek);
+    }
+    
+    public void executeJob(JobConfig jobConfig) {
+        log.info("Executing scheduled job: {}", jobConfig.getJobType());
+        
+        // Create job execution record
+        JobExecution jobExecution = jobExecutionService.createJobExecution(
+                jobConfig.getJobType(), 
+                jobConfig.getId(),
+                "SCHEDULED");
+        
+        // Trigger the job
+        triggerJobExecution(jobConfig.getJobType(), jobExecution.getId());
+    }
+    
+    public void runJobNow(JobType jobType) {
+        log.info("Manually running job: {}", jobType);
+        
+        // Find job config if it exists
+        Optional<JobConfig> jobConfig = jobConfigRepository.findByJobType(jobType);
+        Long jobConfigId = jobConfig.map(JobConfig::getId).orElse(null);
+        
+        // Create job execution record
+        JobExecution jobExecution = jobExecutionService.createJobExecution(
+                jobType, 
+                jobConfigId,
+                "MANUAL");
+        
+        // Trigger the job
+        triggerJobExecution(jobType, jobExecution.getId());
+    }
+    
+    public void runDailyJobs() {
+        log.info("Running all daily jobs");
+        JobType.values().stream()
+                .filter(JobType::isDaily)
+                .filter(jobType -> jobType != JobType.FULL_DAILY) // Individual jobs only
+                .forEach(this::runJobNow);
+    }
+    
+    public void runWeeklyJobs() {
+        log.info("Running all weekly jobs");
+        JobType.values().stream()
+                .filter(JobType::isWeekly)
+                .filter(jobType -> jobType != JobType.FULL_WEEKLY) // Individual jobs only
+                .forEach(this::runJobNow);
+    }
+    
+    public void runFullDailyLoad() {
+        log.info("Running full daily load");
+        runJobNow(JobType.FULL_DAILY);
+    }
+    
+    public void runFullWeeklyLoad() {
+        log.info("Running full weekly load");
+        runJobNow(JobType.FULL_WEEKLY);
+    }
+    
+    private void triggerJobExecution(JobType jobType, Long jobExecutionId) {
+        etlServiceClient.triggerJob(jobType)
+                .flatMap(response -> {
+                    // Successful job execution
+                    return Mono.just(jobExecutionService.updateJobExecutionStatus(
+                            jobExecutionId,
+                            JobStatus.COMPLETED,
+                            response,
+                            null
+                    ));
+                })
+                .onErrorResume(error -> {
+                    // Failed job execution
+                    log.error("Job execution failed: {}", error.getMessage());
+                    return Mono.just(jobExecutionService.updateJobExecutionStatus(
+                            jobExecutionId,
+                            JobStatus.FAILED,
+                            null,
+                            error.getMessage()
+                    ));
+                })
+                .subscribe();
+    }
+    
+    @Transactional(readOnly = true)
+    public List<JobConfig> getAllJobConfigs() {
+        return jobConfigRepository.findAll();
+    }
+    
+    @Transactional(readOnly = true)
+    public Optional<JobConfig> getJobConfig(Long id) {
+        return jobConfigRepository.findById(id);
+    }
+    
+    @Transactional(readOnly = true)
+    public Optional<JobConfig> getJobConfigByType(JobType jobType) {
+        return jobConfigRepository.findByJobType(jobType);
+    }
+    
+    @Transactional
+    public void toggleJobStatus(Long jobConfigId, boolean enabled, String username) {
+        JobConfig jobConfig = jobConfigRepository.findById(jobConfigId)
+                .orElseThrow(() -> new IllegalArgumentException("Job config not found with id: " + jobConfigId));
+        
+        jobConfig.setEnabled(enabled);
+        jobConfig.setLastModifiedBy(username);
+        jobConfig.setLastModifiedDate(LocalDateTime.now());
+        
+        jobConfigRepository.save(jobConfig);
+        
+        if (enabled) {
+            scheduleJob(jobConfig);
+        } else {
+            cancelJob(jobConfigId);
+        }
+    }
+}
+```
+
+### 7. Utility Class
+
+#### CronUtils.java
+```java
+package com.example.etlscheduler.util;
+
+import java.time.DayOfWeek;
+import java.util.HashSet;
+import java.util.Set;
+
+public class CronUtils {
+
+    // Convert a set of active days to a cron day-of-week expression
+    public static String activeDaysToCronDaysOfWeek(Set<Integer> activeDays) {
+        if (activeDays == null || activeDays.isEmpty()) {
+            return "*"; // All days
+        }
+        
+        return activeDays.stream()
+                .map(String::valueOf)
+                .reduce((a, b) -> a + "," + b)
+                .orElse("*");
+    }
+    
+    // Convert a cron expression's day-of-week component to a set of days
+    public static Set<Integer> cronDaysOfWeekToActiveDays(String cronDaysOfWeek) {
+        Set<Integer> activeDays = new HashSet<>();
+        
+        if (cronDaysOfWeek == null || cronDaysOfWeek.equals("*")) {
+            // All days are active
+            activeDays.add(DayOfWeek.MONDAY.getValue());
+            activeDays.add(DayOfWeek.TUESDAY.getValue());
+            activeDays.add(DayOfWeek.WEDNESDAY.getValue());
+            activeDays.add(DayOfWeek.THURSDAY.getValue());
+            activeDays.add(DayOfWeek.FRIDAY.getValue());
+            activeDays.add(DayOfWeek.SATURDAY.getValue());
+            activeDays.add(DayOfWeek.SUNDAY.getValue());
+            return activeDays;
+        }
+        
+        String[] parts = cronDaysOfWeek.split(",");
+        for (String part : parts) {
+            try {
+                int day = Integer.parseInt(part.trim());
+                if (day >= 1 && day <= 7) {
+                    activeDays.add(day);
+                }
+            } catch (NumberFormatException e) {
+                // Ignore non-numeric values
+            }
+        }
+        
+        return activeDays;
+    }
+    
+    // Convert day checkboxes to a cron expression
+    public static String createCronExpression(String time, Set<Integer> activeDays) {
+        String[] timeParts = time.split(":");
+        if (timeParts.length != 2) {
+            throw new IllegalArgumentException("Time must be in format HH:MM");
+        }
+        
+        int hour = Integer.parseInt(timeParts[0]);
+        int minute = Integer.parseInt(timeParts[1]);
+        
+        String dayOfWeekExpression = activeDaysToCronDaysOfWeek(activeDays);
+        
+        // second minute hour day-of-month month day-of-week
+        return String.format("0 %d %d * * %s", minute, hour, dayOfWeekExpression);
+    }
+}
+```
+
+### 8. Controller Classes
+
+#### a. JobController.java
+```java
+package com.example.etlscheduler.controller;
+
+import com.example.etlscheduler.model.JobExecution;
+import com.example.etlscheduler.model.JobType;
+import com.example.etlscheduler.service.JobExecutionService;
+import com.example.etlscheduler.service.JobSchedulerService;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+@RequestMapping("/api/jobs")
+@RequiredArgsConstructor
+@Slf4j
+public class JobController {
+
+    private final JobSchedulerService jobSchedulerService;
+    private final JobExecutionService jobExecutionService;
+
+    @PostMapping("/run/daily")
+    public ResponseEntity<String> runDailyJobs() {
+        jobSchedulerService.runFullDailyLoad();
+        return ResponseEntity.ok("Daily jobs started successfully");
+    }
+
+    @PostMapping("/run/weekly")
+    public ResponseEntity<String> runWeeklyJobs() {
+        jobSchedulerService.runFullWeeklyLoad();
+        return ResponseEntity.ok("Weekly jobs started successfully");
+    }
+
+    @PostMapping("/run/{jobType}")
+    public ResponseEntity<String> runJob(@PathVariable String jobType) {
+        try {
+            JobType type = JobType.valueOf(jobType.toUpperCase());
+            jobSchedulerService.runJobNow(type);
+            return ResponseEntity.ok(type.getDisplayName() + " job started successfully");
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body("Invalid job type: " + jobType);
+        }
+    }
+
+    @GetMapping("/execution/{id}")
+    public ResponseEntity<JobExecution> getJobExecution(@PathVariable Long id) {
+        return jobExecutionService.getJobExecution(id)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    @PostMapping("/cancel-all")
+    public ResponseEntity<String> cancelAllJobs(Authentication authentication) {
+        log.info("Cancelling all scheduled jobs, requested by: {}", authentication.getName());
+        jobSchedulerService.cancelAllJobs();
+        return ResponseEntity.ok("All scheduled jobs cancelled successfully");
+    }
+
+    @PostMapping("/reload")
+    public ResponseEntity<String> reloadAllJobs() {
+        jobSchedulerService.loadAndScheduleAllJobs();
+        return ResponseEntity.ok("All jobs reloaded successfully");
+    }
+}
+```
+
+#### b. ScheduleController.java
+```java
+package com.example.etlscheduler.controller;
+
+import com.example.etlscheduler.model.JobConfig;
+import com.example.etlscheduler.model.JobType;
+import com.example.etlscheduler.service.JobSchedulerService;
+import com.example.etlscheduler.util.CronUtils;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.*;
+
+import javax.validation.Valid;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
+
+@RestController
+@RequestMapping("/api/schedules")
+@RequiredArgsConstructor
+@Slf4j
+public class ScheduleController {
+
+    private final JobSchedulerService jobSchedulerService;
+
+    @GetMapping
+    public ResponseEntity<List<JobConfig>> getAllJobConfigs() {
+        return ResponseEntity.ok(jobSchedulerService.getAllJobConfigs());
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<JobConfig> getJobConfig(@PathVariable Long id) {
+        return jobSchedulerService.getJobConfig(id)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    @GetMapping("/type/{jobType}")
+    public ResponseEntity<JobConfig> getJobConfigByType(@PathVariable String jobType) {
+        try {
+            JobType type = JobType.valueOf(jobType.toUpperCase());
+            return jobSchedulerService.getJobConfigByType(type)
+                    .map(ResponseEntity::ok)
+                    .orElse(ResponseEntity.notFound().build());
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().build();
+        }
+    }
+
+    @PostMapping
+    public ResponseEntity<JobConfig> saveJobConfig(
+            @Valid @RequestBody JobConfig jobConfig,
+            Authentication authentication) {
+        JobConfig savedConfig = jobSchedulerService.saveJobConfig(jobConfig, authentication.getName());
+        return ResponseEntity.ok(savedConfig);
+    }
+
+    @PostMapping("/cron")
+    public ResponseEntity<JobConfig> saveJobConfigWithCron(
+            @RequestParam JobType jobType,
+            @RequestParam String time,
+            @RequestParam Set<Integer> days,
+            @RequestParam boolean enabled,
+            Authentication authentication) {
+        
+        String cronExpression = CronUtils.createCronExpression(time, days);
+        
+        JobConfig jobConfig = JobConfig.builder()
+                .jobType(jobType)
+                .cronExpression(cronExpression)
+                .activeDaysOfWeek(days)
+                .enabled(enabled)
+                .build();
+        
+        JobConfig savedConfig = jobSchedulerService.saveJobConfig(jobConfig, authentication.getName());
+        return ResponseEntity.ok(savedConfig);
+    }
+
+    @PutMapping("/{id}/toggle")
+    public ResponseEntity<String> toggleJobStatus(
+            @PathVariable Long id,
+            @RequestParam boolean enabled,
+            Authentication authentication) {
+        
+        jobSchedulerService.toggleJobStatus(id, enabled, authentication.getName());
+        return ResponseEntity.ok("Job status updated successfully");
+    }
+}
+```
+
+#### c. StatusController.java
+```java
+package com.example.etlscheduler.controller;
+
+import com.example.etlscheduler.model.JobExecution;
+import com.example.etlscheduler.service.JobExecutionService;
+import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@RequestMapping("/api/status")
+@RequiredArgsConstructor
+public class StatusController {
+
+    private final JobExecutionService jobExecutionService;
+
+    @GetMapping("/executions")
+    public ResponseEntity<Page<JobExecution>> getJobExecutions(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        
+        Pageable pageable = PageRequest.of(page, size);
+        Page<JobExecution> executions = jobExecutionService.getAllJobExecutions(pageable);
+        return ResponseEntity.ok(executions);
+    }
+
+    @GetMapping("/executions/{id}")
+    public ResponseEntity<JobExecution> getJobExecution(@PathVariable Long id) {
+        return jobExecutionService.getJobExecution(id)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
+    }
+}
+```
+
+### 9. Frontend - Thymeleaf Templates
+
+#### a. index.html
+```html
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ETL Scheduler</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="/css/main.css">
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="/">ETL Scheduler</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/">Dashboard</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/jobs">Jobs</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/history">History</a>
+                    </li>
+                </ul>
+                <div class="navbar-text text-white me-3" th:text="${#authentication.name}"></div>
+                <a class="btn btn-outline-light" href="/logout">Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <div class="row mb-4">
+            <div class="col-md-12">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="card-title mb-0">Quick Actions</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="d-grid gap-2">
+                                    <button id="runDailyBtn" class="btn btn-success">Run Daily Jobs Now</button>
+                                    <button id="runWeeklyBtn" class="btn btn-info">Run Weekly Jobs Now</button>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="d-grid gap-2">
+                                    <button id="cancelAllBtn" class="btn btn-danger">Cancel All Scheduled Jobs</button>
+                                    <button id="reloadBtn" class="btn btn-warning">Reload All Job Schedules</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="card-title mb-0">Daily Jobs</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="list-group" id="dailyJobsList">
+                            <!-- Daily jobs will be loaded here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="card-title mb-0">Weekly Jobs</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="list-group" id="weeklyJobsList">
+                            <!-- Weekly jobs will be loaded here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mt-4">
+            <div class="col-md-12">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="card-title mb-0">Recent Job Executions</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Job Type</th>
+                                        <th>Status</th>
+                                        <th>Start Time</th>
+                                        <th>End Time</th>
+                                        <th>Trigger</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="recentExecutions">
+                                    <!-- Recent executions will be loaded here -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Job Schedule Modal -->
+    <div class="modal fade" id="scheduleModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Schedule Job</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="scheduleForm">
+                        <input type="hidden" id="jobTypeInput">
+                        <div class="mb-3">
+                            <label for="timeInput" class="form-label">Execution Time</label>
+                            <input type="time" class="form-control" id="timeInput" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Days of Week</label>
+                            <div class="d-flex flex-wrap">
+                                <div class="form-check me-3">
+                                    <input class="form-check-input day-checkbox" type="checkbox" id="day1" value="1">
+                                    <label class="form-check-label" for="day1">Monday</label>
+                                </div>
+                                <div class="form-check me-3">
+                                    <input class="form-check-input day-checkbox" type="checkbox" id="day2" value="2">
+                                    <label class="form-check-label" for="day2">Tuesday</label>
+                                </div>
+                                <div class="form-check me-3">
+                                    <input class="form-check-input day-checkbox" type="checkbox" id="day3" value="3">
+                                    <label class="form-check-label" for="day3">Wednesday</label>
+                                </div>
+                                <div class="form-check me-3">
+                                    <input class="form-check-input day-checkbox" type="checkbox" id="day4" value="4">
+                                    <label class="form-check-label" for="day4">Thursday</label>
+                                </div>
+                                <div class="form-check me-3">
+                                    <input class="form-check-input day-checkbox" type="checkbox" id="day5" value="5">
+                                    <label class="form-check-label" for="day5">Friday</label>
+                                </div>
+                                <div class="form-check me-3">
+                                    <input class="form-check-input day-checkbox" type="checkbox" id="day6" value="6">
+                                    <label class="form-check-label" for="day6">Saturday</label>
+                                </div>
+                                <div class="form-check me-3">
+                                    <input class="form-check-input day-checkbox" type="checkbox" id="day7" value="7">
+                                    <label class="form-check-label" for="day7">Sunday</label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="cronExpressionInput" class="form-label">
+                                Cron Expression
+                                <i class="bi bi-info-circle" data-bs-toggle="tooltip" title="Format: second minute hour day-of-month month day-of-week"></i>
+                            </label>
+                            <input type="text" class="form-control" id="cronExpressionInput" placeholder="0 0 * * * *">
+                            <div class="form-text">Automatically calculated from time and days selection. Advanced users can override.</div>
+                        </div>
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" id="enabledCheckbox" checked>
+                            <label class="form-check-label" for="enabledCheckbox">
+                                Enabled
+                            </label>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="saveScheduleBtn">Save Schedule</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Job Details Modal -->
+    <div class="modal fade" id="jobDetailsModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Job Execution Details</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <div class="row">
+                            <div class="col-md-4">
+                                <strong>Job Type:</strong> <span id="detailsJobType"></span>
+                            </div>
+                            <div class="col-md-4">
+                                <strong>Status:</strong> <span id="detailsStatus"></span>
+                            </div>
+                            <div class="col-md-4">
+                                <strong>Trigger:</strong> <span id="detailsTrigger"></span>
+                            </div>
+                        </div>
+                        <div class="row mt-2">
+                            <div class="col-md-6">
+                                <strong>Start Time:</strong> <span id="detailsStartTime"></span>
+                            </div>
+                            <div class="col-md-6">
+                                <strong>End Time:</strong> <span id="detailsEndTime"></span>
+                            </div>
+                        </div>
+                    </div>
+                    <hr>
+                    <div class="mb-3">
+                        <h6>Log Output</h6>
+                        <pre id="detailsLogOutput" class="border p-3 bg-light" style="max-height: 300px; overflow-y: auto;"></pre>
+                    </div>
+                    <div id="errorDetailsSection">
+                        <h6>Error Details</h6>
+                        <pre id="detailsErrorOutput" class="border p-3 bg-light text-danger" style="max-height: 200px; overflow-y: auto;"></pre>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="/js/scheduler.js"></script>
+</body>
+</html>
+```
+
+#### b. jobs.html
+```html
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Jobs Configuration - ETL Scheduler</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="/css/main.css">
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="/">ETL Scheduler</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/">Dashboard</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/jobs">Jobs</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/history">History</a>
+                    </li>
+                </ul>
+                <div class="navbar-text text-white me-3" th:text="${#authentication.name}"></div>
+                <a class="btn btn-outline-light" href="/logout">Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <div class="row mb-4">
+            <div class="col-md-12">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="card-title mb-0">Job Configuration</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="alert alert-info">
+                            <i class="bi bi-info-circle-fill me-2"></i>
+                            Configure job schedules using cron expressions or the simplified day and time selector. 
+                            Changes will be applied immediately to the scheduler.
+                        </div>
+                        
+                        <div class="table-responsive">
+                            <table class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>Job Name</th>
+                                        <th>Category</th>
+                                        <th>Cron Expression</th>
+                                        <th>Days</th>
+                                        <th>Status</th>
+                                        <th>Last Modified</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="jobConfigTable">
+                                    <!-- Job configurations will be loaded here -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="card-title mb-0">Daily Jobs</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="list-group" id="dailyJobsList">
+                            <!-- Daily jobs will be loaded here -->
+                        </div>
+                        <div class="d-grid gap-2 mt-3">
+                            <button id="runDailyBtn" class="btn btn-success">Run All Daily Jobs Now</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="card-title mb-0">Weekly Jobs</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="list-group" id="weeklyJobsList">
+                            <!-- Weekly jobs will be loaded here -->
+                        </div>
+                        <div class="d-grid gap-2 mt-3">
+                            <button id="runWeeklyBtn" class="btn btn-success">Run All Weekly Jobs Now</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Job Schedule Modal (same as in index.html) -->
+    <div class="modal fade" id="scheduleModal" tabindex="-1" aria-hidden="true">
+        <!-- Same modal content as in index.html -->
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="/js/scheduler.js"></script>
+</body>
+</html>
+```
+
+#### c. history.html
+```html
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Execution History - ETL Scheduler</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="/css/main.css">
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
