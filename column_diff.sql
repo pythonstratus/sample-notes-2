@@ -55,7 +55,7 @@ BEGIN
     DBMS_OUTPUT.PUT_LINE('Source: ' || v_source_owner || '.' || v_source_table_name);
     DBMS_OUTPUT.PUT_LINE('Target: ' || v_target_owner || '.' || v_target_table_name);
     
-    -- Complex query that performs a full structural comparison between tables
+    -- Modified query that avoids directly comparing LONG datatypes
     OPEN v_result_cursor FOR
     WITH source_columns AS (
         SELECT 
@@ -67,7 +67,6 @@ BEGIN
             nullable,
             column_id,
             default_length,
-            data_default,
             char_length,
             char_used
         FROM all_tab_columns
@@ -84,7 +83,6 @@ BEGIN
             nullable,
             column_id,
             default_length,
-            data_default,
             char_length,
             char_used
         FROM all_tab_columns
@@ -93,13 +91,13 @@ BEGIN
     ),
     source_only AS (
         SELECT 
-            s.column_name,
-            s.data_type,
-            s.data_length,
-            s.data_precision,
-            s.data_scale,
-            s.nullable,
-            s.column_id,
+            column_name,
+            data_type,
+            data_length,
+            data_precision,
+            data_scale,
+            nullable,
+            column_id,
             'ONLY_IN_SOURCE' AS status,
             NULL AS difference_details
         FROM source_columns s
@@ -111,13 +109,13 @@ BEGIN
     ),
     target_only AS (
         SELECT 
-            t.column_name,
-            t.data_type,
-            t.data_length,
-            t.data_precision,
-            t.data_scale,
-            t.nullable,
-            t.column_id,
+            column_name,
+            data_type,
+            data_length,
+            data_precision,
+            data_scale,
+            nullable,
+            column_id,
             'ONLY_IN_TARGET' AS status,
             NULL AS difference_details
         FROM target_columns t
@@ -170,9 +168,8 @@ BEGIN
                 THEN 'Nullability: ' || s.nullable || ' vs ' || t.nullable
                 WHEN s.column_id != t.column_id
                 THEN 'Position: ' || TO_CHAR(s.column_id) || ' vs ' || TO_CHAR(t.column_id)
-                WHEN NVL(s.default_length, 0) != NVL(t.default_length, 0) OR
-                     NVL(TO_CHAR(s.data_default), '*') != NVL(TO_CHAR(t.data_default), '*')
-                THEN 'Default value differs'
+                WHEN NVL(s.default_length, 0) != NVL(t.default_length, 0)
+                THEN 'Default value may differ (cannot compare directly)'
                 ELSE 'Other difference'
             END AS difference_details
         FROM source_columns s
@@ -185,7 +182,6 @@ BEGIN
            OR NVL(s.char_length, 0) != NVL(t.char_length, 0)
            OR NVL(s.char_used, 'B') != NVL(t.char_used, 'B')
            OR NVL(s.default_length, 0) != NVL(t.default_length, 0)
-           OR NVL(TO_CHAR(s.data_default), '*') != NVL(TO_CHAR(t.data_default), '*')
     ),
     common_same AS (
         SELECT 
@@ -208,7 +204,6 @@ BEGIN
           AND NVL(s.char_length, 0) = NVL(t.char_length, 0)
           AND NVL(s.char_used, 'B') = NVL(t.char_used, 'B')
           AND NVL(s.default_length, 0) = NVL(t.default_length, 0)
-          AND NVL(TO_CHAR(s.data_default), '*') = NVL(TO_CHAR(t.data_default), '*')
     ),
     all_columns AS (
         -- Columns only in source
@@ -381,8 +376,7 @@ BEGIN
                OR s.nullable != t.nullable
                OR NVL(s.char_length, 0) != NVL(t.char_length, 0)
                OR NVL(s.char_used, 'B') != NVL(t.char_used, 'B')
-               OR NVL(s.default_length, 0) != NVL(t.default_length, 0)
-               OR NVL(TO_CHAR(s.data_default), '*') != NVL(TO_CHAR(t.data_default), '*'))
+               OR NVL(s.default_length, 0) != NVL(t.default_length, 0))
         );
         
         SELECT COUNT(*) INTO v_same FROM (
@@ -401,7 +395,6 @@ BEGIN
             AND NVL(s.char_length, 0) = NVL(t.char_length, 0)
             AND NVL(s.char_used, 'B') = NVL(t.char_used, 'B')
             AND NVL(s.default_length, 0) = NVL(t.default_length, 0)
-            AND NVL(TO_CHAR(s.data_default), '*') = NVL(TO_CHAR(t.data_default), '*')
         );
         
         DBMS_OUTPUT.PUT_LINE('==================== STRUCTURE COMPARISON SUMMARY ====================');
