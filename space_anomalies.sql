@@ -1,235 +1,377 @@
--- Simple function to analyze column spaces without complex types
-CREATE OR REPLACE FUNCTION analyze_column_spaces(
-    p_table_name VARCHAR2,
-    p_column_name VARCHAR2
-) RETURN VARCHAR2 IS
-    v_total_rows NUMBER;
-    v_rows_with_leading NUMBER;
-    v_rows_with_trailing NUMBER;
-    v_avg_leading NUMBER;
-    v_max_leading NUMBER;
-    v_avg_trailing NUMBER;
-    v_max_trailing NUMBER;
+-- ============================================
+-- ORACLE FUNCTIONS FOR SPACE ANALYSIS
+-- ============================================
+
+-- 1. BASIC SPACE ANALYSIS FUNCTION
+CREATE OR REPLACE FUNCTION analyze_spaces(
+    p_text VARCHAR2
+) RETURN VARCHAR2
+IS
+    v_original_length NUMBER;
+    v_trimmed_length NUMBER;
+    v_leading_spaces NUMBER;
+    v_trailing_spaces NUMBER;
+    v_total_spaces NUMBER;
     v_result VARCHAR2(4000);
-    v_sql VARCHAR2(4000);
 BEGIN
-    -- Get statistics using dynamic SQL
-    v_sql := 'SELECT 
-                COUNT(*) total_rows,
-                COUNT(CASE WHEN LENGTH(' || p_column_name || ') > LENGTH(LTRIM(' || p_column_name || ')) THEN 1 END) rows_with_leading,
-                COUNT(CASE WHEN LENGTH(' || p_column_name || ') > LENGTH(RTRIM(' || p_column_name || ')) THEN 1 END) rows_with_trailing,
-                AVG(LENGTH(' || p_column_name || ') - LENGTH(LTRIM(' || p_column_name || '))) avg_leading,
-                MAX(LENGTH(' || p_column_name || ') - LENGTH(LTRIM(' || p_column_name || '))) max_leading,
-                AVG(LENGTH(' || p_column_name || ') - LENGTH(RTRIM(' || p_column_name || '))) avg_trailing,
-                MAX(LENGTH(' || p_column_name || ') - LENGTH(RTRIM(' || p_column_name || '))) max_trailing
-              FROM ' || p_table_name || '
-              WHERE ' || p_column_name || ' IS NOT NULL';
+    v_original_length := LENGTH(p_text);
+    v_trimmed_length := LENGTH(TRIM(p_text));
     
-    EXECUTE IMMEDIATE v_sql INTO 
-        v_total_rows, v_rows_with_leading, v_rows_with_trailing,
-        v_avg_leading, v_max_leading, v_avg_trailing, v_max_trailing;
+    -- Calculate leading spaces
+    v_leading_spaces := LENGTH(p_text) - LENGTH(LTRIM(p_text));
     
-    -- Build result string
-    v_result := 'Space Analysis for ' || p_table_name || '.' || p_column_name || CHR(10) ||
-                '=====================================' || CHR(10) ||
-                'Total Rows: ' || v_total_rows || CHR(10) ||
-                'Rows with Leading Spaces: ' || v_rows_with_leading || 
-                ' (' || ROUND(v_rows_with_leading / v_total_rows * 100, 2) || '%)' || CHR(10) ||
-                'Rows with Trailing Spaces: ' || v_rows_with_trailing || 
-                ' (' || ROUND(v_rows_with_trailing / v_total_rows * 100, 2) || '%)' || CHR(10) ||
-                'Average Leading Spaces: ' || ROUND(v_avg_leading, 2) || CHR(10) ||
-                'Maximum Leading Spaces: ' || v_max_leading || CHR(10) ||
-                'Average Trailing Spaces: ' || ROUND(v_avg_trailing, 2) || CHR(10) ||
-                'Maximum Trailing Spaces: ' || v_max_trailing;
+    -- Calculate trailing spaces
+    v_trailing_spaces := LENGTH(p_text) - LENGTH(RTRIM(p_text));
+    
+    -- Total spaces
+    v_total_spaces := v_leading_spaces + v_trailing_spaces;
+    
+    v_result := 'Original_Length:' || v_original_length ||
+                '|Trimmed_Length:' || v_trimmed_length ||
+                '|Leading_Spaces:' || v_leading_spaces ||
+                '|Trailing_Spaces:' || v_trailing_spaces ||
+                '|Total_Spaces:' || v_total_spaces;
     
     RETURN v_result;
-END analyze_column_spaces;
+END analyze_spaces;
 /
 
--- Create a view for easy anomaly detection
-CREATE OR REPLACE VIEW space_anomalies_view AS
-WITH space_analysis AS (
+-- 2. ADVANCED STATISTICS TYPE
+CREATE OR REPLACE TYPE space_stats_type AS OBJECT (
+    column_name VARCHAR2(128),
+    total_rows NUMBER,
+    rows_with_leading_spaces NUMBER,
+    rows_with_trailing_spaces NUMBER,
+    avg_leading_spaces NUMBER,
+    avg_trailing_spaces NUMBER,
+    max_leading_spaces NUMBER,
+    max_trailing_spaces NUMBER,
+    std_dev_leading NUMBER,
+    std_dev_trailing NUMBER,
+    z_score_threshold_rows NUMBER,
+    entropy_value NUMBER
+);
+/
+
+-- 3. TABLE TYPE FOR RETURNING MULTIPLE STATS
+CREATE OR REPLACE TYPE space_stats_table AS TABLE OF space_stats_type;
+/
+
+-- 4. COMPREHENSIVE SPACE STATISTICS FUNCTION
+CREATE OR REPLACE FUNCTION get_space_statistics(
+    p_table_name VARCHAR2,
+    p_column_name VARCHAR2,
+    p_z_score_threshold NUMBER DEFAULT 2
+) RETURN space_stats_table PIPELINED
+IS
+    v_sql VARCHAR2(4000);
+    v_stats space_stats_type;
+    v_cursor SYS_REFCURSOR;
+    
+    -- Variables for entropy calculation
+    v_entropy NUMBER := 0;
+    v_probability NUMBER;
+    v_space_count NUMBER;
+    v_total_chars NUMBER;
+BEGIN
+    -- Main statistics query
+    v_sql := '
+    WITH space_analysis AS (
+        SELECT 
+            LENGTH(' || p_column_name || ') - LENGTH(LTRIM(' || p_column_name || ')) AS leading_spaces,
+            LENGTH(' || p_column_name || ') - LENGTH(RTRIM(' || p_column_name || ')) AS trailing_spaces,
+            LENGTH(' || p_column_name || ') AS total_length
+        FROM ' || p_table_name || '
+        WHERE ' || p_column_name || ' IS NOT NULL
+    ),
+    stats AS (
+        SELECT 
+            COUNT(*) AS total_rows,
+            SUM(CASE WHEN leading_spaces > 0 THEN 1 ELSE 0 END) AS rows_with_leading,
+            SUM(CASE WHEN trailing_spaces > 0 THEN 1 ELSE 0 END) AS rows_with_trailing,
+            AVG(leading_spaces) AS avg_leading,
+            AVG(trailing_spaces) AS avg_trailing,
+            MAX(leading_spaces) AS max_leading,
+            MAX(trailing_spaces) AS max_trailing,
+            STDDEV(leading_spaces) AS std_dev_leading,
+            STDDEV(trailing_spaces) AS std_dev_trailing
+        FROM space_analysis
+    ),
+    z_scores AS (
+        SELECT 
+            COUNT(*) AS z_score_outliers
+        FROM space_analysis, stats
+        WHERE ABS(leading_spaces - stats.avg_leading) / NULLIF(stats.std_dev_leading, 0) > ' || p_z_score_threshold || '
+           OR ABS(trailing_spaces - stats.avg_trailing) / NULLIF(stats.std_dev_trailing, 0) > ' || p_z_score_threshold || '
+    )
     SELECT 
-        'YOUR_TABLE_NAME' as table_name,  -- Replace with your table
-        'YOUR_COLUMN_NAME' as column_name, -- Replace with your column
-        ROWID as row_id,
-        YOUR_COLUMN_NAME as original_value,  -- Replace with your column
-        LENGTH(YOUR_COLUMN_NAME) - LENGTH(LTRIM(YOUR_COLUMN_NAME)) as leading_spaces,
-        LENGTH(YOUR_COLUMN_NAME) - LENGTH(RTRIM(YOUR_COLUMN_NAME)) as trailing_spaces,
-        LENGTH(TRIM(YOUR_COLUMN_NAME)) as trimmed_length,
-        CASE 
-            WHEN LENGTH(YOUR_COLUMN_NAME) = 0 THEN 0
-            ELSE ((LENGTH(YOUR_COLUMN_NAME) - LENGTH(TRIM(YOUR_COLUMN_NAME))) / LENGTH(YOUR_COLUMN_NAME)) * 100
-        END as space_ratio
-    FROM YOUR_TABLE_NAME  -- Replace with your table
-    WHERE YOUR_COLUMN_NAME IS NOT NULL
+        s.total_rows,
+        s.rows_with_leading,
+        s.rows_with_trailing,
+        s.avg_leading,
+        s.avg_trailing,
+        s.max_leading,
+        s.max_trailing,
+        s.std_dev_leading,
+        s.std_dev_trailing,
+        z.z_score_outliers
+    FROM stats s, z_scores z';
+    
+    OPEN v_cursor FOR v_sql;
+    FETCH v_cursor INTO 
+        v_stats.total_rows,
+        v_stats.rows_with_leading_spaces,
+        v_stats.rows_with_trailing_spaces,
+        v_stats.avg_leading_spaces,
+        v_stats.avg_trailing_spaces,
+        v_stats.max_leading_spaces,
+        v_stats.max_trailing_spaces,
+        v_stats.std_dev_leading,
+        v_stats.std_dev_trailing,
+        v_stats.z_score_threshold_rows;
+    CLOSE v_cursor;
+    
+    -- Calculate entropy for space distribution
+    v_sql := '
+    SELECT 
+        SUM(space_count) AS total_chars,
+        SUM(-1 * (space_count/total_chars) * LN(space_count/total_chars) / LN(2)) AS entropy
+    FROM (
+        SELECT 
+            COUNT(*) AS space_count,
+            SUM(COUNT(*)) OVER () AS total_chars
+        FROM (
+            SELECT 
+                LENGTH(' || p_column_name || ') - LENGTH(LTRIM(' || p_column_name || ')) AS leading_spaces
+            FROM ' || p_table_name || '
+            WHERE ' || p_column_name || ' IS NOT NULL
+        )
+        GROUP BY leading_spaces
+    )
+    WHERE space_count > 0';
+    
+    BEGIN
+        EXECUTE IMMEDIATE v_sql INTO v_total_chars, v_entropy;
+        v_stats.entropy_value := NVL(v_entropy, 0);
+    EXCEPTION
+        WHEN OTHERS THEN
+            v_stats.entropy_value := 0;
+    END;
+    
+    v_stats.column_name := p_column_name;
+    
+    PIPE ROW(v_stats);
+    RETURN;
+END get_space_statistics;
+/
+
+-- 5. Z-SCORE CALCULATION FUNCTION
+CREATE OR REPLACE FUNCTION calculate_z_score(
+    p_value NUMBER,
+    p_mean NUMBER,
+    p_std_dev NUMBER
+) RETURN NUMBER
+IS
+BEGIN
+    IF p_std_dev = 0 OR p_std_dev IS NULL THEN
+        RETURN 0;
+    END IF;
+    
+    RETURN (p_value - p_mean) / p_std_dev;
+END calculate_z_score;
+/
+
+-- 6. ENTROPY CALCULATION FUNCTION
+CREATE OR REPLACE FUNCTION calculate_entropy(
+    p_table_name VARCHAR2,
+    p_column_name VARCHAR2,
+    p_analyze_type VARCHAR2 DEFAULT 'LEADING' -- 'LEADING', 'TRAILING', 'BOTH'
+) RETURN NUMBER
+IS
+    v_entropy NUMBER := 0;
+    v_sql VARCHAR2(4000);
+BEGIN
+    IF p_analyze_type = 'LEADING' THEN
+        v_sql := '
+        SELECT 
+            SUM(-1 * probability * LN(probability) / LN(2))
+        FROM (
+            SELECT 
+                COUNT(*) / SUM(COUNT(*)) OVER () AS probability
+            FROM (
+                SELECT 
+                    LENGTH(' || p_column_name || ') - LENGTH(LTRIM(' || p_column_name || ')) AS space_count
+                FROM ' || p_table_name || '
+                WHERE ' || p_column_name || ' IS NOT NULL
+            )
+            GROUP BY space_count
+        )
+        WHERE probability > 0';
+    ELSIF p_analyze_type = 'TRAILING' THEN
+        v_sql := '
+        SELECT 
+            SUM(-1 * probability * LN(probability) / LN(2))
+        FROM (
+            SELECT 
+                COUNT(*) / SUM(COUNT(*)) OVER () AS probability
+            FROM (
+                SELECT 
+                    LENGTH(' || p_column_name || ') - LENGTH(RTRIM(' || p_column_name || ')) AS space_count
+                FROM ' || p_table_name || '
+                WHERE ' || p_column_name || ' IS NOT NULL
+            )
+            GROUP BY space_count
+        )
+        WHERE probability > 0';
+    ELSE -- BOTH
+        v_sql := '
+        SELECT 
+            SUM(-1 * probability * LN(probability) / LN(2))
+        FROM (
+            SELECT 
+                COUNT(*) / SUM(COUNT(*)) OVER () AS probability
+            FROM (
+                SELECT 
+                    (LENGTH(' || p_column_name || ') - LENGTH(LTRIM(' || p_column_name || '))) +
+                    (LENGTH(' || p_column_name || ') - LENGTH(RTRIM(' || p_column_name || '))) AS space_count
+                FROM ' || p_table_name || '
+                WHERE ' || p_column_name || ' IS NOT NULL
+            )
+            GROUP BY space_count
+        )
+        WHERE probability > 0';
+    END IF;
+    
+    EXECUTE IMMEDIATE v_sql INTO v_entropy;
+    
+    RETURN NVL(v_entropy, 0);
+END calculate_entropy;
+/
+
+-- ============================================
+-- TESTING QUERIES
+-- ============================================
+
+-- Test 1: Basic space analysis for a single column
+SELECT 
+    column_value,
+    analyze_spaces(column_value) AS space_analysis
+FROM TABLE(
+    -- Sample data with various space patterns
+    SYS.ODCIVARCHAR2LIST(
+        '  Leading spaces',
+        'Trailing spaces  ',
+        '  Both sides  ',
+        'No spaces',
+        '    Many leading',
+        'Many trailing    '
+    )
+);
+
+-- Test 2: Comprehensive statistics for a table column
+-- Replace 'YOUR_TABLE' and 'YOUR_COLUMN' with actual names
+SELECT * FROM TABLE(get_space_statistics('YOUR_TABLE', 'YOUR_COLUMN', 2));
+
+-- Test 3: Z-Score analysis for identifying outliers
+WITH space_data AS (
+    SELECT 
+        YOUR_COLUMN,
+        LENGTH(YOUR_COLUMN) - LENGTH(LTRIM(YOUR_COLUMN)) AS leading_spaces,
+        LENGTH(YOUR_COLUMN) - LENGTH(RTRIM(YOUR_COLUMN)) AS trailing_spaces
+    FROM YOUR_TABLE
+    WHERE YOUR_COLUMN IS NOT NULL
 ),
 stats AS (
     SELECT 
-        AVG(leading_spaces) as avg_leading,
-        STDDEV(leading_spaces) as stddev_leading
-    FROM space_analysis
+        AVG(leading_spaces) AS avg_leading,
+        STDDEV(leading_spaces) AS std_leading,
+        AVG(trailing_spaces) AS avg_trailing,
+        STDDEV(trailing_spaces) AS std_trailing
+    FROM space_data
 )
 SELECT 
-    sa.*,
+    sd.YOUR_COLUMN,
+    sd.leading_spaces,
+    sd.trailing_spaces,
+    calculate_z_score(sd.leading_spaces, s.avg_leading, s.std_leading) AS z_score_leading,
+    calculate_z_score(sd.trailing_spaces, s.avg_trailing, s.std_trailing) AS z_score_trailing,
     CASE 
-        WHEN ABS(sa.leading_spaces - s.avg_leading) > 2.5 * s.stddev_leading THEN 'Y'
-        ELSE 'N'
-    END as is_anomaly,
+        WHEN ABS(calculate_z_score(sd.leading_spaces, s.avg_leading, s.std_leading)) > 2 THEN 'Outlier'
+        ELSE 'Normal'
+    END AS leading_status,
     CASE 
-        WHEN sa.space_ratio > 50 THEN 'High'
-        WHEN sa.space_ratio > 20 THEN 'Medium'
-        ELSE 'Low'
-    END as space_severity
-FROM space_analysis sa, stats s;
+        WHEN ABS(calculate_z_score(sd.trailing_spaces, s.avg_trailing, s.std_trailing)) > 2 THEN 'Outlier'
+        ELSE 'Normal'
+    END AS trailing_status
+FROM space_data sd, stats s
+ORDER BY ABS(calculate_z_score(sd.leading_spaces, s.avg_leading, s.std_leading)) DESC;
 
--- Simple procedure to show space patterns
-CREATE OR REPLACE PROCEDURE show_space_patterns(
-    p_table_name VARCHAR2,
-    p_column_name VARCHAR2,
-    p_top_n NUMBER DEFAULT 10
-) IS
-    v_sql VARCHAR2(4000);
-    v_spaces NUMBER;
-    v_count NUMBER;
-    v_percentage NUMBER;
-    v_total NUMBER;
-BEGIN
-    -- Get total count
-    EXECUTE IMMEDIATE 'SELECT COUNT(*) FROM ' || p_table_name || ' WHERE ' || p_column_name || ' IS NOT NULL' 
-    INTO v_total;
-    
-    DBMS_OUTPUT.PUT_LINE('Space Pattern Analysis for ' || p_table_name || '.' || p_column_name);
-    DBMS_OUTPUT.PUT_LINE('=========================================');
-    DBMS_OUTPUT.PUT_LINE('Total rows: ' || v_total);
-    DBMS_OUTPUT.PUT_LINE('');
-    DBMS_OUTPUT.PUT_LINE('Leading Space Patterns:');
-    DBMS_OUTPUT.PUT_LINE('Spaces | Count | Percentage');
-    DBMS_OUTPUT.PUT_LINE('-------|-------|------------');
-    
-    -- Create dynamic SQL for pattern analysis
-    v_sql := 'SELECT leading_spaces, COUNT(*) cnt
-              FROM (
-                SELECT LENGTH(' || p_column_name || ') - LENGTH(LTRIM(' || p_column_name || ')) as leading_spaces
-                FROM ' || p_table_name || '
-                WHERE ' || p_column_name || ' IS NOT NULL
-              )
-              GROUP BY leading_spaces
-              ORDER BY cnt DESC';
-    
-    -- Use cursor to fetch results
-    DECLARE
-        TYPE t_cursor IS REF CURSOR;
-        c_patterns t_cursor;
-        v_row_count NUMBER := 0;
-    BEGIN
-        OPEN c_patterns FOR v_sql;
-        LOOP
-            FETCH c_patterns INTO v_spaces, v_count;
-            EXIT WHEN c_patterns%NOTFOUND OR v_row_count >= p_top_n;
-            
-            v_percentage := ROUND(v_count / v_total * 100, 2);
-            DBMS_OUTPUT.PUT_LINE(LPAD(v_spaces, 6) || ' | ' || 
-                                LPAD(v_count, 5) || ' | ' || 
-                                LPAD(v_percentage, 10) || '%');
-            v_row_count := v_row_count + 1;
-        END LOOP;
-        CLOSE c_patterns;
-    END;
-END show_space_patterns;
-/
-
--- Function to detect anomalies (returns cursor)
-CREATE OR REPLACE FUNCTION find_space_anomalies(
-    p_table_name VARCHAR2,
-    p_column_name VARCHAR2,
-    p_id_column VARCHAR2 DEFAULT 'ROWID',
-    p_threshold NUMBER DEFAULT 2.5
-) RETURN SYS_REFCURSOR IS
-    v_cursor SYS_REFCURSOR;
-    v_sql VARCHAR2(4000);
-    v_avg_spaces NUMBER;
-    v_stddev_spaces NUMBER;
-BEGIN
-    -- Calculate statistics
-    v_sql := 'SELECT 
-                AVG(LENGTH(' || p_column_name || ') - LENGTH(LTRIM(' || p_column_name || '))),
-                STDDEV(LENGTH(' || p_column_name || ') - LENGTH(LTRIM(' || p_column_name || ')))
-              FROM ' || p_table_name || '
-              WHERE ' || p_column_name || ' IS NOT NULL';
-    
-    EXECUTE IMMEDIATE v_sql INTO v_avg_spaces, v_stddev_spaces;
-    
-    -- Open cursor for anomalies
-    v_sql := 'SELECT 
-                ' || p_id_column || ' as row_id,
-                ' || p_column_name || ' as original_value,
-                LENGTH(' || p_column_name || ') - LENGTH(LTRIM(' || p_column_name || ')) as leading_spaces,
-                LENGTH(' || p_column_name || ') - LENGTH(RTRIM(' || p_column_name || ')) as trailing_spaces,
-                ABS((LENGTH(' || p_column_name || ') - LENGTH(LTRIM(' || p_column_name || ')) - ' || v_avg_spaces || ') / NULLIF(' || v_stddev_spaces || ', 0)) as z_score
-              FROM ' || p_table_name || '
-              WHERE ' || p_column_name || ' IS NOT NULL
-              AND ABS((LENGTH(' || p_column_name || ') - LENGTH(LTRIM(' || p_column_name || ')) - ' || v_avg_spaces || ') / NULLIF(' || v_stddev_spaces || ', 0)) > ' || p_threshold || '
-              ORDER BY 5 DESC';
-    
-    OPEN v_cursor FOR v_sql;
-    RETURN v_cursor;
-END find_space_anomalies;
-/
-
--- Usage Examples:
-
--- 1. Get basic analysis (this will work)
-SELECT analyze_column_spaces('EMPLOYEES', 'FIRST_NAME') FROM DUAL;
-
--- 2. Show space patterns (enable DBMS_OUTPUT first)
-BEGIN
-    DBMS_OUTPUT.ENABLE(1000000);
-    show_space_patterns('EMPLOYEES', 'FIRST_NAME', 5);
-END;
-/
-
--- 3. Find anomalies using cursor
-DECLARE
-    v_cursor SYS_REFCURSOR;
-    v_row_id VARCHAR2(100);
-    v_value VARCHAR2(4000);
-    v_leading NUMBER;
-    v_trailing NUMBER;
-    v_z_score NUMBER;
-BEGIN
-    v_cursor := find_space_anomalies('EMPLOYEES', 'FIRST_NAME', 'EMPLOYEE_ID');
-    
-    DBMS_OUTPUT.PUT_LINE('Space Anomalies Found:');
-    DBMS_OUTPUT.PUT_LINE('======================');
-    
-    LOOP
-        FETCH v_cursor INTO v_row_id, v_value, v_leading, v_trailing, v_z_score;
-        EXIT WHEN v_cursor%NOTFOUND;
-        
-        DBMS_OUTPUT.PUT_LINE('ID: ' || v_row_id || 
-                           ' | Value: "' || v_value || '"' ||
-                           ' | Leading: ' || v_leading || 
-                           ' | Z-Score: ' || ROUND(v_z_score, 2));
-    END LOOP;
-    
-    CLOSE v_cursor;
-END;
-/
-
--- 4. Create a simple summary table
-CREATE OR REPLACE VIEW space_summary_view AS
+-- Test 4: Entropy calculation for different space types
 SELECT 
-    'EMPLOYEES' as table_name,
-    'FIRST_NAME' as column_name,
-    COUNT(*) as total_rows,
-    COUNT(CASE WHEN LENGTH(FIRST_NAME) > LENGTH(LTRIM(FIRST_NAME)) THEN 1 END) as rows_with_leading,
-    COUNT(CASE WHEN LENGTH(FIRST_NAME) > LENGTH(RTRIM(FIRST_NAME)) THEN 1 END) as rows_with_trailing,
-    MIN(LENGTH(FIRST_NAME) - LENGTH(LTRIM(FIRST_NAME))) as min_leading_spaces,
-    MAX(LENGTH(FIRST_NAME) - LENGTH(LTRIM(FIRST_NAME))) as max_leading_spaces,
-    ROUND(AVG(LENGTH(FIRST_NAME) - LENGTH(LTRIM(FIRST_NAME))), 2) as avg_leading_spaces,
-    MIN(LENGTH(FIRST_NAME) - LENGTH(RTRIM(FIRST_NAME))) as min_trailing_spaces,
-    MAX(LENGTH(FIRST_NAME) - LENGTH(RTRIM(FIRST_NAME))) as max_trailing_spaces,
-    ROUND(AVG(LENGTH(FIRST_NAME) - LENGTH(RTRIM(FIRST_NAME))), 2) as avg_trailing_spaces
-FROM EMPLOYEES
-WHERE FIRST_NAME IS NOT NULL;
+    'Leading Spaces' AS analysis_type,
+    calculate_entropy('YOUR_TABLE', 'YOUR_COLUMN', 'LEADING') AS entropy_value
+FROM DUAL
+UNION ALL
+SELECT 
+    'Trailing Spaces' AS analysis_type,
+    calculate_entropy('YOUR_TABLE', 'YOUR_COLUMN', 'TRAILING') AS entropy_value
+FROM DUAL
+UNION ALL
+SELECT 
+    'Total Spaces' AS analysis_type,
+    calculate_entropy('YOUR_TABLE', 'YOUR_COLUMN', 'BOTH') AS entropy_value
+FROM DUAL;
+
+-- Test 5: Distribution analysis
+WITH space_distribution AS (
+    SELECT 
+        LENGTH(YOUR_COLUMN) - LENGTH(LTRIM(YOUR_COLUMN)) AS space_count,
+        COUNT(*) AS frequency,
+        COUNT(*) * 100.0 / SUM(COUNT(*)) OVER () AS percentage
+    FROM YOUR_TABLE
+    WHERE YOUR_COLUMN IS NOT NULL
+    GROUP BY LENGTH(YOUR_COLUMN) - LENGTH(LTRIM(YOUR_COLUMN))
+)
+SELECT 
+    space_count AS leading_spaces,
+    frequency,
+    ROUND(percentage, 2) AS percentage,
+    RPAD('*', LEAST(50, ROUND(percentage)), '*') AS histogram
+FROM space_distribution
+ORDER BY space_count;
+
+-- Test 6: Pattern detection query
+SELECT 
+    pattern_type,
+    COUNT(*) AS count,
+    ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER (), 2) AS percentage
+FROM (
+    SELECT 
+        CASE 
+            WHEN LENGTH(YOUR_COLUMN) - LENGTH(LTRIM(YOUR_COLUMN)) > 0 
+                 AND LENGTH(YOUR_COLUMN) - LENGTH(RTRIM(YOUR_COLUMN)) > 0 THEN 'Both Sides'
+            WHEN LENGTH(YOUR_COLUMN) - LENGTH(LTRIM(YOUR_COLUMN)) > 0 THEN 'Leading Only'
+            WHEN LENGTH(YOUR_COLUMN) - LENGTH(RTRIM(YOUR_COLUMN)) > 0 THEN 'Trailing Only'
+            ELSE 'No Extra Spaces'
+        END AS pattern_type
+    FROM YOUR_TABLE
+    WHERE YOUR_COLUMN IS NOT NULL
+)
+GROUP BY pattern_type
+ORDER BY count DESC;
+
+-- Test 7: Advanced metrics summary
+SELECT 
+    'Space Analysis Summary' AS report_type,
+    (SELECT COUNT(*) FROM YOUR_TABLE WHERE YOUR_COLUMN IS NOT NULL) AS total_records,
+    (SELECT COUNT(*) FROM YOUR_TABLE 
+     WHERE LENGTH(YOUR_COLUMN) - LENGTH(LTRIM(YOUR_COLUMN)) > 0) AS records_with_leading_spaces,
+    (SELECT COUNT(*) FROM YOUR_TABLE 
+     WHERE LENGTH(YOUR_COLUMN) - LENGTH(RTRIM(YOUR_COLUMN)) > 0) AS records_with_trailing_spaces,
+    ROUND((SELECT AVG(LENGTH(YOUR_COLUMN) - LENGTH(LTRIM(YOUR_COLUMN))) 
+           FROM YOUR_TABLE WHERE YOUR_COLUMN IS NOT NULL), 2) AS avg_leading_spaces,
+    ROUND((SELECT STDDEV(LENGTH(YOUR_COLUMN) - LENGTH(LTRIM(YOUR_COLUMN))) 
+           FROM YOUR_TABLE WHERE YOUR_COLUMN IS NOT NULL), 2) AS stddev_leading_spaces,
+    calculate_entropy('YOUR_TABLE', 'YOUR_COLUMN', 'LEADING') AS entropy_leading,
+    calculate_entropy('YOUR_TABLE', 'YOUR_COLUMN', 'TRAILING') AS entropy_trailing
+FROM DUAL;
