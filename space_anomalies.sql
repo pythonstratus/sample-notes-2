@@ -15,6 +15,10 @@ CREATE OR REPLACE TYPE space_stats_type AS OBJECT (
 );
 /
 
+-- Create a table type for the stats (needed for TABLE function)
+CREATE OR REPLACE TYPE space_stats_table AS TABLE OF space_stats_type;
+/
+
 -- Create a table type for detailed row analysis
 CREATE OR REPLACE TYPE space_detail_type AS OBJECT (
     row_id VARCHAR2(100),
@@ -38,7 +42,7 @@ CREATE OR REPLACE PACKAGE space_analysis_pkg AS
         p_table_name VARCHAR2,
         p_column_name VARCHAR2,
         p_where_clause VARCHAR2 DEFAULT NULL
-    ) RETURN space_stats_type;
+    ) RETURN space_stats_table PIPELINED;
     
     -- Function to get detailed row-by-row analysis
     FUNCTION get_detailed_space_analysis(
@@ -96,7 +100,7 @@ CREATE OR REPLACE PACKAGE BODY space_analysis_pkg AS
         p_table_name VARCHAR2,
         p_column_name VARCHAR2,
         p_where_clause VARCHAR2 DEFAULT NULL
-    ) RETURN space_stats_type IS
+    ) RETURN space_stats_table PIPELINED IS
         
         v_stats space_stats_type := space_stats_type(0,0,0,0,0,0,0,0,NULL,NULL,0,0);
         v_sql VARCHAR2(4000);
@@ -158,7 +162,8 @@ CREATE OR REPLACE PACKAGE BODY space_analysis_pkg AS
             v_stats.anomaly_score := 0;
         END IF;
         
-        RETURN v_stats;
+        PIPE ROW(v_stats);
+        RETURN;
         
     END get_column_space_stats;
     
