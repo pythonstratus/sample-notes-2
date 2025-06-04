@@ -1,141 +1,41 @@
-import java.io.BufferedReader;
-import java.io.FileReader;
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+Here are the rewritten questions organized by topic for your stakeholder meetings:
 
-public class BasicDatParser {
-    
-    // This class represents a parsed record from the DAT file
-    static class BusinessRecord {
-        String identifier;
-        String businessName;
-        String locationInfo;
-        
-        public BusinessRecord(String identifier, String businessName, String locationInfo) {
-            this.identifier = identifier;
-            this.businessName = businessName;
-            this.locationInfo = locationInfo;
-        }
-        
-        @Override
-        public String toString() {
-            return "Record{" +
-                    "identifier='" + identifier + '\'' +
-                    ", businessName='" + businessName + '\'' +
-                    ", locationInfo='" + locationInfo + '\'' +
-                    '}';
-        }
-    }
-    
-    public static void main(String[] args) {
-        String filePath = "your_file.dat"; // Replace with your actual file path
-        List<BusinessRecord> records = new ArrayList<>();
-        
-        try (BufferedReader reader = new BufferedReader(new FileReader(filePath))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                BusinessRecord record = parseLine(line);
-                if (record != null) {
-                    records.add(record);
-                    System.out.println(record); // Print each record as it's parsed
-                }
-            }
-        } catch (IOException e) {
-            System.err.println("Error reading file: " + e.getMessage());
-        }
-        
-        // Generate and display statistics
-        displayStatistics(records);
-    }
-    
-    private static BusinessRecord parseLine(String line) {
-        if (line == null || line.trim().isEmpty()) {
-            return null;
-        }
-        
-        // Based on your sample, assuming records have this structure:
-        // - First ~30 characters: Identifier/reference number
-        // - Next section: Business name in ALL CAPS
-        // - Later section: Location information
-        
-        // Extract identifier (first part)
-        String identifier = "";
-        if (line.length() > 30) {
-            identifier = line.substring(0, 30).trim();
-        }
-        
-        // Extract business name (looking for capitalized words)
-        String businessName = "";
-        int nameStart = 0;
-        for (int i = 30; i < line.length(); i++) {
-            if (Character.isLetter(line.charAt(i)) && Character.isUpperCase(line.charAt(i))) {
-                nameStart = i;
-                break;
-            }
-        }
-        
-        if (nameStart > 0) {
-            int nameEnd = line.indexOf(' ', nameStart + 10); // Assuming business name is at least 10 chars
-            if (nameEnd > 0) {
-                businessName = line.substring(nameStart, nameEnd).trim();
-            } else {
-                businessName = line.substring(nameStart).trim();
-            }
-        }
-        
-        // Look for location information in the latter part of the line
-        String locationInfo = "";
-        int locationStart = line.indexOf("  ", nameStart + businessName.length());
-        if (locationStart > 0) {
-            locationInfo = line.substring(locationStart).trim();
-        }
-        
-        return new BusinessRecord(identifier, businessName, locationInfo);
-    }
-    
-    private static void displayStatistics(List<BusinessRecord> records) {
-        System.out.println("\n===== DAT File Statistics =====");
-        System.out.println("Total records: " + records.size());
-        
-        // Count by business name
-        Map<String, Integer> businessNameCounts = new HashMap<>();
-        for (BusinessRecord record : records) {
-            String name = record.businessName;
-            businessNameCounts.put(name, businessNameCounts.getOrDefault(name, 0) + 1);
-        }
-        
-        System.out.println("\nBusiness name distribution:");
-        businessNameCounts.entrySet().stream()
-            .sorted((e1, e2) -> e2.getValue().compareTo(e1.getValue()))
-            .limit(10)  // Show top 10
-            .forEach(e -> System.out.println(e.getKey() + ": " + e.getValue()));
-        
-        // Count by identifier pattern (first 2 characters)
-        Map<String, Integer> idPatternCounts = new HashMap<>();
-        for (BusinessRecord record : records) {
-            if (record.identifier.length() >= 2) {
-                String pattern = record.identifier.substring(0, 2);
-                idPatternCounts.put(pattern, idPatternCounts.getOrDefault(pattern, 0) + 1);
-            }
-        }
-        
-        System.out.println("\nIdentifier pattern distribution:");
-        idPatternCounts.entrySet().stream()
-            .sorted((e1, e2) -> e2.getValue().compareTo(e1.getValue()))
-            .forEach(e -> System.out.println(e.getKey() + ": " + e.getValue()));
-        
-        // Check for special patterns like consecutive zeros
-        int recordsWithConsecutiveZeros = 0;
-        for (BusinessRecord record : records) {
-            if (record.identifier.contains("0000")) {
-                recordsWithConsecutiveZeros++;
-            }
-        }
-        
-        System.out.println("\nRecords with consecutive zeros: " + recordsWithConsecutiveZeros);
-        System.out.println("Percentage: " + (100.0 * recordsWithConsecutiveZeros / records.size()) + "%");
-    }
-}
+## **Case Management & Status Tracking**
+
+**1. Case Queue Workflow**
+- "When a case is completed and leaves the active queue, what status should it show in the system?"
+- "How do you distinguish between cases that are temporarily on hold versus permanently closed?"
+- "What information do managers need to track case progress and bottlenecks?"
+
+**2. Case Assignment Process**
+- "When a case gets reassigned from one person/team to another, what assignment history needs to be preserved?"
+- "How do you currently determine who is responsible for handling a specific case?"
+- "What should happen in the system when organizational territories or team structures change?"
+
+## **Data Management & Reporting**
+
+**3. Reference Numbers & Identification**
+- "How do you currently use the different reference numbers (queue numbers vs. RO numbers) in your daily work?"
+- "What's the business purpose of having separate tracking numbers, and how should they relate to each other?"
+- "When do you need to look up cases by different identifier types?"
+
+**4. Assignment History & Tracking**
+- "When someone new takes over a case, what background information do they need about previous assignments?"
+- "How do you currently track which cases have been reassigned and why?"
+- "What reports do you need about case assignments and workload distribution?"
+
+## **System Integration & Process Flow**
+
+**5. Cross-System Updates**
+- "When assignment information changes, which other systems or processes need to be automatically updated?"
+- "How do you ensure that assignment changes don't create gaps in case coverage?"
+- "What manual workarounds are you currently using that we should automate?"
+
+## **Business Impact & Requirements**
+
+**6. Pain Points & Success Criteria**
+- "What are the biggest challenges with the current case assignment process?"
+- "How would you measure whether the new system is working effectively?"
+- "What would happen to your business operations if case assignments weren't tracked properly?"
+
+**These questions focus on business value rather than technical implementation, making them more accessible for stakeholder discussions while still gathering the technical requirements you need.**
