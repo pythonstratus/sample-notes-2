@@ -403,3 +403,47 @@ BEGIN
     );
 END;
 /
+
+
+
+
+
+
+
+
+
+
+
+-- Same schema comparison (original behavior)
+SELECT * FROM TABLE(compare_tables_fn('TABLE1', 'TABLE2'));
+
+-- Cross-schema comparison
+SELECT * FROM TABLE(compare_tables_fn(
+    p_source_table => 'CUSTOMERS',
+    p_target_table => 'CUSTOMERS', 
+    p_source_schema => 'PROD_SCHEMA',
+    p_target_schema => 'TEST_SCHEMA'
+));
+
+-- Compare tables between DEV and PROD environments
+EXEC compare_tables_enhanced(
+    p_source_table => 'SALES_DATA',
+    p_target_table => 'SALES_DATA',
+    p_source_schema => 'DEV_SALES',
+    p_target_schema => 'PROD_SALES',
+    p_parallel_degree => 4,
+    p_max_differences => 500
+);
+
+-- Check what schemas you have access to
+EXEC list_accessible_schemas;
+
+-- Cross-schema with specific field comparison
+EXEC compare_tables_proc(
+    p_source_table => 'ORDERS',
+    p_target_table => 'ORDERS',
+    p_source_schema => 'SCHEMA_A',
+    p_target_schema => 'SCHEMA_B',
+    p_compare_field => 'ORDER_AMOUNT',
+    p_key_field => 'ORDER_ID'
+);
