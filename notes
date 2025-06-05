@@ -1,278 +1,81 @@
--- Oracle Version - Fast Table Replication Procedure
-CREATE OR REPLACE PROCEDURE sp_fast_table_replication (
-    p_source_schema IN VARCHAR2,
-    p_source_table IN VARCHAR2,
-    p_target_schema IN VARCHAR2,
-    p_target_table IN VARCHAR2,
-    p_truncate_target IN NUMBER DEFAULT 1,  -- 1 = true, 0 = false
-    p_batch_size IN NUMBER DEFAULT 100000
-) AS
-    v_sql VARCHAR2(32767);
-    v_start_time TIMESTAMP := SYSTIMESTAMP;
-    v_row_count NUMBER;
-    v_total_rows NUMBER := 0;
-    v_column_list VARCHAR2(32767);
-    v_pk_column VARCHAR2(128);
-    v_min_id NUMBER;
-    v_max_id NUMBER;
-    v_current_min NUMBER;
-    v_current_max NUMBER;
-    
-    -- Cursor for indexes
-    CURSOR c_indexes IS
-        SELECT index_name, uniqueness, index_type
-        FROM all_indexes
-        WHERE owner = UPPER(p_target_schema)
-        AND table_name = UPPER(p_target_table)
-        AND index_type NOT IN ('LOB', 'DOMAIN')
-        AND status = 'VALID';
-        
-    -- Cursor for constraints
-    CURSOR c_constraints IS
-        SELECT constraint_name, constraint_type
-        FROM all_constraints
-        WHERE owner = UPPER(p_target_schema)
-        AND table_name = UPPER(p_target_table)
-        AND constraint_type IN ('C', 'R')  -- Check and Foreign Key constraints
-        AND status = 'ENABLED';
-        
-BEGIN
-    DBMS_OUTPUT.PUT_LINE('Starting fast table replication at ' || TO_CHAR(v_start_time, 'YYYY-MM-DD HH24:MI:SS'));
-    
-    -- 1. Build column list (excluding virtual columns)
-    SELECT LISTAGG(column_name, ',') WITHIN GROUP (ORDER BY column_id)
-    INTO v_column_list
-    FROM all_tab_cols
-    WHERE owner = UPPER(p_source_schema)
-    AND table_name = UPPER(p_source_table)
-    AND virtual_column = 'NO'
-    AND hidden_column = 'NO';
-    
-    -- 2. Get primary key column for batch processing
-    BEGIN
-        SELECT cols.column_name
-        INTO v_pk_column
-        FROM all_constraints cons
-        JOIN all_cons_columns cols ON cons.constraint_name = cols.constraint_name
-        WHERE cons.owner = UPPER(p_source_schema)
-        AND cons.table_name = UPPER(p_source_table)
-        AND cons.constraint_type = 'P'
-        AND cols.position = 1
-        AND ROWNUM = 1;
-    EXCEPTION
-        WHEN NO_DATA_FOUND THEN
-            v_pk_column := NULL;
-    END;
-    
-    -- 3. Disable constraints
-    DBMS_OUTPUT.PUT_LINE('Disabling constraints...');
-    FOR rec IN c_constraints LOOP
-        v_sql := 'ALTER TABLE ' || p_target_schema || '.' || p_target_table || 
-                 ' DISABLE CONSTRAINT ' || rec.constraint_name;
-        EXECUTE IMMEDIATE v_sql;
-    END LOOP;
-    
-    -- 4. Make indexes unusable (faster than dropping/recreating)
-    DBMS_OUTPUT.PUT_LINE('Making indexes unusable...');
-    FOR rec IN c_indexes LOOP
-        -- Skip unique indexes if they're part of constraints
-        IF rec.uniqueness = 'NONUNIQUE' OR rec.index_type = 'NORMAL' THEN
-            v_sql := 'ALTER INDEX ' || p_target_schema || '.' || rec.index_name || ' UNUSABLE';
-            EXECUTE IMMEDIATE v_sql;
-        END IF;
-    END LOOP;
-    
-    -- 5. Set session parameters for performance
-    EXECUTE IMMEDIATE 'ALTER SESSION SET skip_unusable_indexes = TRUE';
-    EXECUTE IMMEDIATE 'ALTER SESSION ENABLE PARALLEL DML';
-    
-    -- 6. Truncate target if requested
-    IF p_truncate_target = 1 THEN
-        DBMS_OUTPUT.PUT_LINE('Truncating target table...');
-        v_sql := 'TRUNCATE TABLE ' || p_target_schema || '.' || p_target_table;
-        EXECUTE IMMEDIATE v_sql;
-    END IF;
-    
-    -- 7. Copy data
-    DBMS_OUTPUT.PUT_LINE('Starting data copy...');
-    
-    IF v_pk_column IS NOT NULL AND p_batch_size > 0 THEN
-        -- Batch processing with primary key
-        v_sql := 'SELECT MIN(' || v_pk_column || '), MAX(' || v_pk_column || ') FROM ' || 
-                 p_source_schema || '.' || p_source_table;
-        EXECUTE IMMEDIATE v_sql INTO v_min_id, v_max_id;
-        
-        v_current_min := v_min_id;
-        
-        WHILE v_current_min <= v_max_id LOOP
-            v_current_max := v_current_min + p_batch_size - 1;
-            
-            v_sql := 'INSERT /*+ APPEND PARALLEL(8) */ INTO ' || 
-                     p_target_schema || '.' || p_target_table || ' (' || v_column_list || ') ' ||
-                     'SELECT /*+ PARALLEL(8) */ ' || v_column_list || 
-                     ' FROM ' || p_source_schema || '.' || p_source_table ||
-                     ' WHERE ' || v_pk_column || ' >= :1 AND ' || v_pk_column || ' <= :2';
-                     
-            EXECUTE IMMEDIATE v_sql USING v_current_min, v_current_max;
-            v_row_count := SQL%ROWCOUNT;
-            v_total_rows := v_total_rows + v_row_count;
-            
-            COMMIT;  -- Commit each batch
-            
-            DBMS_OUTPUT.PUT_LINE('Copied rows ' || v_current_min || ' to ' || v_current_max || 
-                                ' (' || v_total_rows || ' total)');
-            
-            v_current_min := v_current_max + 1;
-        END LOOP;
-    ELSE
-        -- Single insert with APPEND hint for direct path load
-        v_sql := 'INSERT /*+ APPEND PARALLEL(8) */ INTO ' || 
-                 p_target_schema || '.' || p_target_table || ' (' || v_column_list || ') ' ||
-                 'SELECT /*+ PARALLEL(8) */ ' || v_column_list || 
-                 ' FROM ' || p_source_schema || '.' || p_source_table;
-                 
-        EXECUTE IMMEDIATE v_sql;
-        v_total_rows := SQL%ROWCOUNT;
-        COMMIT;
-        
-        DBMS_OUTPUT.PUT_LINE('Copied ' || v_total_rows || ' rows');
-    END IF;
-    
-    -- 8. Rebuild indexes
-    DBMS_OUTPUT.PUT_LINE('Rebuilding indexes...');
-    FOR rec IN c_indexes LOOP
-        BEGIN
-            -- Try online rebuild first (requires Enterprise Edition)
-            v_sql := 'ALTER INDEX ' || p_target_schema || '.' || rec.index_name || 
-                     ' REBUILD PARALLEL 8 NOLOGGING ONLINE';
-            EXECUTE IMMEDIATE v_sql;
-        EXCEPTION
-            WHEN OTHERS THEN
-                -- Fall back to offline rebuild
-                v_sql := 'ALTER INDEX ' || p_target_schema || '.' || rec.index_name || 
-                         ' REBUILD PARALLEL 8 NOLOGGING';
-                EXECUTE IMMEDIATE v_sql;
-        END;
-    END LOOP;
-    
-    -- 9. Re-enable constraints
-    DBMS_OUTPUT.PUT_LINE('Re-enabling constraints...');
-    FOR rec IN c_constraints LOOP
-        v_sql := 'ALTER TABLE ' || p_target_schema || '.' || p_target_table || 
-                 ' ENABLE NOVALIDATE CONSTRAINT ' || rec.constraint_name;
-        EXECUTE IMMEDIATE v_sql;
-    END LOOP;
-    
-    -- 10. Gather statistics
-    DBMS_OUTPUT.PUT_LINE('Gathering statistics...');
-    DBMS_STATS.GATHER_TABLE_STATS(
-        ownname => p_target_schema,
-        tabname => p_target_table,
-        cascade => TRUE,
-        degree => 8,
-        method_opt => 'FOR ALL COLUMNS SIZE AUTO'
-    );
-    
-    -- Reset session parameters
-    EXECUTE IMMEDIATE 'ALTER SESSION DISABLE PARALLEL DML';
-    
-    -- Report completion
-    DBMS_OUTPUT.PUT_LINE('Table replication completed successfully!');
-    DBMS_OUTPUT.PUT_LINE('Total rows copied: ' || v_total_rows);
-    DBMS_OUTPUT.PUT_LINE('Duration: ' || 
-        EXTRACT(MINUTE FROM (SYSTIMESTAMP - v_start_time)) || ' minutes ' ||
-        EXTRACT(SECOND FROM (SYSTIMESTAMP - v_start_time)) || ' seconds');
-        
-EXCEPTION
-    WHEN OTHERS THEN
-        DBMS_OUTPUT.PUT_LINE('Error: ' || SQLERRM);
-        RAISE;
-END sp_fast_table_replication;
-/
+# Response to Client Lock/Unlock Implementation Proposal
 
--- Grant execute permission if needed
--- GRANT EXECUTE ON sp_fast_table_replication TO your_user;
+**Subject:** Re: Lock/Unlock Approach for Application Access Control
 
--- Example usage:
-BEGIN
-    sp_fast_table_replication(
-        p_source_schema => 'SOURCE_SCHEMA',
-        p_source_table => 'LARGE_TABLE',
-        p_target_schema => 'TARGET_SCHEMA',
-        p_target_table => 'LARGE_TABLE_COPY',
-        p_truncate_target => 1,
-        p_batch_size => 100000
-    );
-END;
-/
+Hi [Client Name],
 
--- Alternative: Using DBMS_REDEFINITION for online table copy (no downtime)
--- This is useful for copying/reorganizing tables while they're being used
-DECLARE
-    v_num_errors PLS_INTEGER;
-BEGIN
-    -- Check if table can be redefined
-    DBMS_REDEFINITION.CAN_REDEF_TABLE(
-        uname => 'YOUR_SCHEMA',
-        tname => 'YOUR_TABLE'
-    );
-    
-    -- Start redefinition
-    DBMS_REDEFINITION.START_REDEF_TABLE(
-        uname => 'YOUR_SCHEMA',
-        orig_table => 'ORIGINAL_TABLE',
-        int_table => 'INTERIM_TABLE'
-    );
-    
-    -- Copy dependent objects
-    DBMS_REDEFINITION.COPY_TABLE_DEPENDENTS(
-        uname => 'YOUR_SCHEMA',
-        orig_table => 'ORIGINAL_TABLE',
-        int_table => 'INTERIM_TABLE',
-        copy_indexes => DBMS_REDEFINITION.CONS_ORIG_PARAMS,
-        num_errors => v_num_errors
-    );
-    
-    -- Finish redefinition
-    DBMS_REDEFINITION.FINISH_REDEF_TABLE(
-        uname => 'YOUR_SCHEMA',
-        orig_table => 'ORIGINAL_TABLE',
-        int_table => 'INTERIM_TABLE'
-    );
-END;
-/
+Thank you for your detailed analysis and suggestions regarding the Lock/Unlock functionality. After reviewing your proposed approach against our existing ENTlock and als_lock infrastructure, I have some feedback and recommendations.
 
--- Additional Oracle-specific optimization tips:
-/*
-1. For EXTREMELY large tables (billions of rows), consider:
-   - Using Oracle Data Pump (expdp/impdp) with PARALLEL parameter
-   - Creating external tables for ultra-fast loading
-   - Using transportable tablespaces
-   - Partitioning and exchanging partitions
+## Current System Assessment
 
-2. Direct path insert optimization:
-   ALTER TABLE target_table NOLOGGING;
-   -- Run your insert
-   ALTER TABLE target_table LOGGING;
+Our existing lock management system is more robust than initially apparent:
 
-3. Use CTAS (Create Table As Select) for fastest copy:
-   CREATE TABLE new_table 
-   PARALLEL 8 
-   NOLOGGING 
-   AS SELECT * FROM old_table;
+**Existing Capabilities:**
+- **Multi-application support**: als_lock already handles ALS, ACS, ENT, and GMA applications independently
+- **Multiple lock types**: We support load, admin, eom (End of Month), and cpu resource locks with different behaviors
+- **User exception handling**: ENTlock provides granular access control through unix login and ROID-based permissions
+- **Comprehensive logging**: Full audit trail with timestamps and user tracking
+- **Interactive management**: User-friendly prompts with validation and status reporting
+- **Performance optimized**: File-based checks are faster than database lookups for access control
 
-4. For 12c and later, use In-Memory option:
-   ALTER TABLE your_table INMEMORY;
+## Response to Your Proposed Approach
 
-5. Monitor progress with:
-   SELECT * FROM v$session_longops 
-   WHERE target = 'YOUR_TABLE';
+While we appreciate the thoroughness of your database-table approach with VIEWS_ACCESS_CONTROL and CASE_ASSIGNMENT_ACCESS_CONTROL tables, we believe this would introduce unnecessary complexity for several reasons:
 
-6. Use Resource Manager to control resource usage:
-   BEGIN
-     DBMS_RESOURCE_MANAGER.CREATE_CONSUMER_GROUP(
-       consumer_group => 'BATCH_GROUP',
-       comment => 'For batch operations'
-     );
-   END;
-*/
+**Technical Concerns:**
+1. **Performance Impact**: Database queries for every access check vs. our current efficient file-based system
+2. **Architectural Mismatch**: Our proven file-based approach aligns better with our existing infrastructure
+3. **Over-engineering**: The proposed solution adds complexity without corresponding benefits
+
+**What We'll Implement Instead:**
+
+Rather than moving to database tables, we propose enhancing our existing file-based system to achieve your four lock types:
+
+1. **Application-wide locks** ✓ (already implemented via als_lock)
+2. **Case Assignment locks** → Add case-specific lock files
+3. **View-specific locks** → Add view-specific lock files  
+4. **Combined locks with exceptions** → Enhance ENTlock's exception handling
+
+## Recommended Path Forward
+
+We'll extend our current als_lock framework to include:
+- Case assignment lock files (`$EXECLOG/case_assignment.lock`)
+- View access lock files (`$EXECLOG/views_access.lock`)
+- Enhanced user exception lists within existing lock files
+- Maintain the same interactive interface and logging standards
+
+This approach preserves our system's reliability and performance while delivering the granular control you've identified as necessary.
+
+## Next Steps
+
+1. We'll implement the enhanced lock types within our existing framework
+2. Provide testing documentation showing the four lock scenarios in action
+3. Deliver the solution with our proven file-based architecture intact
+
+We believe this path gives you the functionality you need while maintaining system stability and performance. Let us know if you'd like to discuss any aspects of this approach.
+
+Best regards,  
+[Your Name]
+
+
+This response accomplishes several important things:
+
+**🎯 Key Strengths:**
+
+1. **Demonstrates Technical Competence**: Shows you thoroughly analyzed their suggestion and understand both approaches
+2. **Respectful but Firm**: Acknowledges their effort while confidently defending your existing architecture
+3. **Solution-Oriented**: Doesn't just say "no" - offers a concrete alternative that meets their requirements
+4. **Evidence-Based**: Uses specific technical details from your scripts to justify the decision
+
+**💡 Strategic Benefits:**
+
+- **Maintains Client Relationship**: Respectful tone that values their input
+- **Establishes Technical Leadership**: Positions you as the expert who makes informed architectural decisions
+- **Prevents Scope Creep**: Heads off unnecessary rework while still delivering what they need
+- **Sets Boundaries**: Shows you won't implement changes just because a client suggests them
+
+**🔧 Practical Outcome:**
+
+The response gives you a clear path forward that enhances your existing system rather than rebuilding it, which will be faster to implement and more reliable in production.
+
+Would you like me to adjust the tone or add any specific technical details to strengthen particular points?
