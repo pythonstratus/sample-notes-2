@@ -1,11 +1,13 @@
-CREATE OR REPLACE FUNCTION compare_tables_parallel_fn(
+CREATE OR REPLACE FUNCTION compare_tables_fn(
     p_source_table IN VARCHAR2,
     p_target_table IN VARCHAR2,
     p_compare_field IN VARCHAR2 DEFAULT NULL,
     p_key_field IN VARCHAR2 DEFAULT NULL,
     p_parallel_degree IN NUMBER DEFAULT 2,
     p_sample_percent IN NUMBER DEFAULT NULL,
-    p_max_differences IN NUMBER DEFAULT 10000
+    p_max_differences IN NUMBER DEFAULT 10000,
+    p_source_schema IN VARCHAR2 DEFAULT NULL,
+    p_target_schema IN VARCHAR2 DEFAULT NULL
 ) RETURN SYS_REFCURSOR
 AS
     TYPE t_column_list IS TABLE OF VARCHAR2(128);
@@ -19,6 +21,10 @@ AS
     v_parallel_hint VARCHAR2(200);
     v_sample_clause VARCHAR2(100) := '';
     v_rownum_clause VARCHAR2(100) := '';
+    v_source_schema VARCHAR2(128);
+    v_target_schema VARCHAR2(128);
+    v_source_table_full VARCHAR2(256);
+    v_target_table_full VARCHAR2(256);
     
 BEGIN
     -- Validate required input parameters
@@ -26,27 +32,35 @@ BEGIN
         RAISE_APPLICATION_ERROR(-20001, 'Source table and target table must be specified');
     END IF;
     
-    -- Check if the tables exist
+    -- Set schema names (use current schema if not specified)
+    v_source_schema := NVL(UPPER(p_source_schema), SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA'));
+    v_target_schema := NVL(UPPER(p_target_schema), SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA'));
+    
+    -- Build fully qualified table names
+    v_source_table_full := v_source_schema || '.' || UPPER(p_source_table);
+    v_target_table_full := v_target_schema || '.' || UPPER(p_target_table);
+    
+    -- Check if the tables exist in their respective schemas
     SELECT COUNT(*) INTO v_source_exists 
     FROM all_tables 
-    WHERE table_name = UPPER(p_source_table) AND owner = SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA');
+    WHERE table_name = UPPER(p_source_table) AND owner = v_source_schema;
     
     SELECT COUNT(*) INTO v_target_exists 
     FROM all_tables 
-    WHERE table_name = UPPER(p_target_table) AND owner = SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA');
+    WHERE table_name = UPPER(p_target_table) AND owner = v_target_schema;
     
     IF v_source_exists = 0 THEN
-        RAISE_APPLICATION_ERROR(-20002, 'Source table ' || p_source_table || ' does not exist');
+        RAISE_APPLICATION_ERROR(-20002, 'Source table ' || v_source_table_full || ' does not exist');
     END IF;
     
     IF v_target_exists = 0 THEN
-        RAISE_APPLICATION_ERROR(-20003, 'Target table ' || p_target_table || ' does not exist');
+        RAISE_APPLICATION_ERROR(-20003, 'Target table ' || v_target_table_full || ' does not exist');
     END IF;
     
     -- Build parallel hint based on parameter
     IF p_parallel_degree > 1 THEN
-        v_parallel_hint := '/*+ PARALLEL(' || p_source_table || ',' || p_parallel_degree || ') ' ||
-                          'PARALLEL(' || p_target_table || ',' || p_parallel_degree || ') ' ||
+        v_parallel_hint := '/*+ PARALLEL(' || v_source_schema || '.' || UPPER(p_source_table) || ',' || p_parallel_degree || ') ' ||
+                          'PARALLEL(' || v_target_schema || '.' || UPPER(p_target_table) || ',' || p_parallel_degree || ') ' ||
                           'USE_HASH(s t) PQ_DISTRIBUTE(t HASH HASH) */';
     ELSE
         v_parallel_hint := '/*+ USE_HASH(s t) */';
@@ -62,7 +76,7 @@ BEGIN
         v_rownum_clause := ' AND ROWNUM <= ' || p_max_differences;
     END IF;
     
-    -- Determine key field if not provided (same logic as before)
+    -- Determine key field if not provided (updated for cross-schema support)
     IF p_key_field IS NULL THEN
         BEGIN
             SELECT column_name INTO v_key_field
@@ -72,10 +86,10 @@ BEGIN
                 FROM all_constraints 
                 WHERE table_name = UPPER(p_source_table) 
                 AND constraint_type = 'P'
-                AND owner = SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA')
+                AND owner = v_source_schema
             )
             AND ROWNUM = 1
-            AND owner = SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA');
+            AND owner = v_source_schema;
         EXCEPTION
             WHEN NO_DATA_FOUND THEN
                 BEGIN
@@ -86,16 +100,16 @@ BEGIN
                         FROM all_constraints 
                         WHERE table_name = UPPER(p_source_table) 
                         AND constraint_type = 'U'
-                        AND owner = SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA')
+                        AND owner = v_source_schema
                     )
                     AND ROWNUM = 1
-                    AND owner = SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA');
+                    AND owner = v_source_schema;
                 EXCEPTION
                     WHEN NO_DATA_FOUND THEN
                         SELECT column_name INTO v_key_field
                         FROM all_tab_columns
                         WHERE table_name = UPPER(p_source_table)
-                        AND owner = SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA')
+                        AND owner = v_source_schema
                         AND ROWNUM = 1
                         ORDER BY column_id;
                 END;
@@ -104,35 +118,35 @@ BEGIN
         v_key_field := p_key_field;
     END IF;
     
-    -- Verify key field exists in both tables
+    -- Verify key field exists in both tables (updated for cross-schema)
     SELECT COUNT(*) INTO v_source_exists
     FROM all_tab_columns
     WHERE table_name = UPPER(p_source_table)
     AND column_name = UPPER(v_key_field)
-    AND owner = SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA');
+    AND owner = v_source_schema;
     
     SELECT COUNT(*) INTO v_target_exists
     FROM all_tab_columns
     WHERE table_name = UPPER(p_target_table)
     AND column_name = UPPER(v_key_field)
-    AND owner = SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA');
+    AND owner = v_target_schema;
     
     IF v_source_exists = 0 OR v_target_exists = 0 THEN
         RAISE_APPLICATION_ERROR(-20006, 'Key field ' || v_key_field || ' does not exist in both tables');
     END IF;
     
-    -- Determine which columns to compare (same logic as before)
+    -- Determine which columns to compare (updated for cross-schema)
     IF p_compare_field IS NULL THEN
         FOR col_rec IN (
             SELECT column_name
             FROM all_tab_columns
             WHERE table_name = UPPER(p_source_table)
-            AND owner = SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA')
+            AND owner = v_source_schema
             AND column_name IN (
                 SELECT column_name
                 FROM all_tab_columns
                 WHERE table_name = UPPER(p_target_table)
-                AND owner = SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA')
+                AND owner = v_target_schema
             )
             AND column_name <> v_key_field
             ORDER BY column_id
@@ -149,13 +163,13 @@ BEGIN
         FROM all_tab_columns
         WHERE table_name = UPPER(p_source_table)
         AND column_name = UPPER(p_compare_field)
-        AND owner = SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA');
+        AND owner = v_source_schema;
         
         SELECT COUNT(*) INTO v_target_exists
         FROM all_tab_columns
         WHERE table_name = UPPER(p_target_table)
         AND column_name = UPPER(p_compare_field)
-        AND owner = SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA');
+        AND owner = v_target_schema;
         
         IF v_source_exists = 0 OR v_target_exists = 0 THEN
             RAISE_APPLICATION_ERROR(-20008, 'Compare field ' || p_compare_field || ' does not exist in both tables');
@@ -166,7 +180,7 @@ BEGIN
     END IF;
     
     -- Log comparison parameters
-    DBMS_OUTPUT.PUT_LINE('Comparing tables: ' || p_source_table || ' and ' || p_target_table);
+    DBMS_OUTPUT.PUT_LINE('Comparing tables: ' || v_source_table_full || ' and ' || v_target_table_full);
     DBMS_OUTPUT.PUT_LINE('Key field: ' || v_key_field);
     DBMS_OUTPUT.PUT_LINE('Comparing ' || v_compare_columns.COUNT || ' column(s)');
     DBMS_OUTPUT.PUT_LINE('Parallel degree: ' || p_parallel_degree);
@@ -200,7 +214,7 @@ BEGIN
         v_sql := v_sql || ', ' || v_compare_columns(i);
     END LOOP;
     
-    v_sql := v_sql || ' FROM ' || p_source_table || v_sample_clause || ') s
+    v_sql := v_sql || ' FROM ' || v_source_table_full || v_sample_clause || ') s
     FULL OUTER JOIN (SELECT ' || v_key_field;
     
     -- Add target columns  
@@ -208,7 +222,7 @@ BEGIN
         v_sql := v_sql || ', ' || v_compare_columns(i);
     END LOOP;
     
-    v_sql := v_sql || ' FROM ' || p_target_table || v_sample_clause || ') t 
+    v_sql := v_sql || ' FROM ' || v_target_table_full || v_sample_clause || ') t 
     ON s.' || v_key_field || ' = t.' || v_key_field || '
     WHERE (t.' || v_key_field || ' IS NULL  -- Records only in source
        OR s.' || v_key_field || ' IS NULL   -- Records only in target
@@ -251,7 +265,7 @@ EXCEPTION
         DBMS_OUTPUT.PUT_LINE('Error backtrace: ' || DBMS_UTILITY.FORMAT_ERROR_BACKTRACE);
         DBMS_OUTPUT.PUT_LINE('SQL Statement: ' || SUBSTR(v_sql, 1, 4000));
         RAISE;
-END compare_tables_parallel_fn;
+END compare_tables_fn;
 /
 
 -- Create a wrapper procedure for easier execution with different options
@@ -262,7 +276,9 @@ CREATE OR REPLACE PROCEDURE compare_tables_proc(
     p_key_field IN VARCHAR2 DEFAULT NULL,
     p_parallel_degree IN NUMBER DEFAULT 2,
     p_sample_percent IN NUMBER DEFAULT NULL,
-    p_max_differences IN NUMBER DEFAULT 1000
+    p_max_differences IN NUMBER DEFAULT 1000,
+    p_source_schema IN VARCHAR2 DEFAULT NULL,
+    p_target_schema IN VARCHAR2 DEFAULT NULL
 )
 AS
     v_cursor SYS_REFCURSOR;
@@ -279,7 +295,9 @@ BEGIN
         p_key_field => p_key_field,
         p_parallel_degree => p_parallel_degree,
         p_sample_percent => p_sample_percent,
-        p_max_differences => p_max_differences
+        p_max_differences => p_max_differences,
+        p_source_schema => p_source_schema,
+        p_target_schema => p_target_schema
     );
     
     DBMS_OUTPUT.PUT_LINE('=== COMPARISON RESULTS ===');
@@ -301,5 +319,87 @@ BEGIN
     
     CLOSE v_cursor;
     DBMS_OUTPUT.PUT_LINE('=== Total differences found: ' || v_count || ' ===');
+END;
+/
+
+-- Helper function to check schema access permissions
+CREATE OR REPLACE FUNCTION check_schema_access(p_schema_name IN VARCHAR2) RETURN BOOLEAN
+AS
+    v_count NUMBER;
+BEGIN
+    -- Check if we can query tables in the specified schema
+    SELECT COUNT(*) INTO v_count
+    FROM all_tables
+    WHERE owner = UPPER(p_schema_name)
+    AND ROWNUM = 1;
+    
+    RETURN (v_count > 0);
+EXCEPTION
+    WHEN OTHERS THEN
+        RETURN FALSE;
+END;
+/
+
+-- Utility procedure to list available schemas
+CREATE OR REPLACE PROCEDURE list_accessible_schemas
+AS
+BEGIN
+    DBMS_OUTPUT.PUT_LINE('=== Accessible Schemas ===');
+    FOR schema_rec IN (
+        SELECT DISTINCT owner
+        FROM all_tables
+        WHERE owner NOT IN ('SYS', 'SYSTEM', 'CTXSYS', 'MDSYS', 'OLAPSYS', 'WMSYS', 'XDB', 'ORDDATA', 'ORDSYS')
+        ORDER BY owner
+    ) LOOP
+        DBMS_OUTPUT.PUT_LINE(schema_rec.owner);
+    END LOOP;
+END;
+/
+
+-- Enhanced comparison procedure with schema validation
+CREATE OR REPLACE PROCEDURE compare_tables_enhanced(
+    p_source_table IN VARCHAR2,
+    p_target_table IN VARCHAR2,
+    p_source_schema IN VARCHAR2 DEFAULT NULL,
+    p_target_schema IN VARCHAR2 DEFAULT NULL,
+    p_compare_field IN VARCHAR2 DEFAULT NULL,
+    p_key_field IN VARCHAR2 DEFAULT NULL,
+    p_parallel_degree IN NUMBER DEFAULT 2,
+    p_sample_percent IN NUMBER DEFAULT NULL,
+    p_max_differences IN NUMBER DEFAULT 1000,
+    p_validate_schemas IN BOOLEAN DEFAULT TRUE
+)
+AS
+    v_source_schema VARCHAR2(128);
+    v_target_schema VARCHAR2(128);
+    v_cursor SYS_REFCURSOR;
+BEGIN
+    -- Set default schemas
+    v_source_schema := NVL(UPPER(p_source_schema), SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA'));
+    v_target_schema := NVL(UPPER(p_target_schema), SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA'));
+    
+    -- Validate schema access if requested
+    IF p_validate_schemas THEN
+        IF NOT check_schema_access(v_source_schema) THEN
+            RAISE_APPLICATION_ERROR(-20010, 'Cannot access source schema: ' || v_source_schema);
+        END IF;
+        
+        IF NOT check_schema_access(v_target_schema) THEN
+            RAISE_APPLICATION_ERROR(-20011, 'Cannot access target schema: ' || v_target_schema);
+        END IF;
+    END IF;
+    
+    -- Call the main comparison function
+    compare_tables_proc(
+        p_source_table => p_source_table,
+        p_target_table => p_target_table,
+        p_compare_field => p_compare_field,
+        p_key_field => p_key_field,
+        p_parallel_degree => p_parallel_degree,
+        p_sample_percent => p_sample_percent,
+        p_max_differences => p_max_differences,
+        p_source_schema => v_source_schema,
+        p_target_schema => v_target_schema
+    );
 END;
 /
