@@ -17,3 +17,20 @@ CREATE INDEX idx_trantrail_risk_lookup ON trantrail(
 -- For the estate_tax query
 CREATE INDEX idx_ent_tinsid ON ent(tinsid);
 CREATE INDEX idx_codetable ON codetable(codesid, code, dtchng);
+
+
+
+CREATE OR REPLACE PROCEDURE ENTITYDEV.riskcalc_parallel(area IN NUMBER)
+IS
+BEGIN
+    -- Set session parameters
+    EXECUTE IMMEDIATE 'ALTER SESSION ENABLE PARALLEL DML';
+    EXECUTE IMMEDIATE 'ALTER SESSION FORCE PARALLEL DML PARALLEL 4';
+    
+    -- Call your original procedure
+    ENTITYDEV.riskcalc(area);
+    
+    -- Optionally reset session
+    EXECUTE IMMEDIATE 'ALTER SESSION DISABLE PARALLEL DML';
+END;
+/
