@@ -124,3 +124,130 @@ While maintaining the existing procedure structure, future optimizations could i
 The performance issues are inherent to the stored procedure's design patterns, which were standard practice in Pro*C development but are not optimal for modern Oracle databases handling larger data volumes. The Java/Kubernetes infrastructure is correctly configured with appropriate timeouts for normal database operations. 
 
 Given the complexity and business-critical nature of the 1,300+ line procedure, a complete rewrite is not practical. The implemented optimizations (parallel processing wrapper and strategic indexes) provide immediate performance improvements while maintaining compatibility with the existing codebase and preserving all existing business logic. This approach minimizes risk while delivering measurable performance gains.
+
+
+
+**********************************************************************
+
+Looking at the execution times, I can see both positive improvements and concerning patterns:
+
+## **Performance Analysis:**
+
+### Improvements:
+- **Area 21**: Reduced from ~30 minutes to **~28 minutes** 
+- **Area 22**: Reduced from 1+ hour timeout to **~77 minutes** (completed successfully!)
+
+### Concerns:
+- **Area 23**: Started at 17:44:39 and timed out after ~12 minutes
+- The timeout is happening much sooner than Area 22's 77-minute runtime
+
+## **Recommendation: NO, don't just increase timeout to 5 hours**
+
+Here's why and what to do instead:
+
+### 1. **Investigate Area 23's Different Behavior**
+```sql
+-- Check data volumes for each area
+SELECT emodsid as area, COUNT(*) as record_count
+FROM entmod
+WHERE status = 'O'
+AND emodsid IN (21, 22, 23, 24, 25)
+GROUP BY emodsid
+ORDER BY emodsid;
+
+-- Check if Area 23 has different data characteristics
+SELECT emodsid, COUNT(DISTINCT type), COUNT(DISTINCT mft), COUNT(*)
+FROM entmod
+WHERE status = 'O'
+AND emodsid IN (22, 23)
+GROUP BY emodsid;
+```
+
+### 2. **Implement Tiered Approach**
+```sql
+CREATE OR REPLACE PROCEDURE riskcalc_parallel_heavy(area IN NUMBER)
+IS
+    PRAGMA AUTONOMOUS_TRANSACTION;
+BEGIN
+    -- More aggressive settings for heavy areas
+    EXECUTE IMMEDIATE 'ALTER SESSION ENABLE PARALLEL DML';
+    EXECUTE IMMEDIATE 'ALTER SESSION FORCE PARALLEL DML PARALLEL 8';  -- Increased from 4
+    EXECUTE IMMEDIATE 'ALTER SESSION SET SORT_AREA_SIZE = 209715200';  -- 200MB
+    EXECUTE IMMEDIATE 'ALTER SESSION SET HASH_AREA_SIZE = 209715200';  -- 200MB
+    
+    ENTITYDEV.riskcalc(area);
+    
+    COMMIT;
+    EXECUTE IMMEDIATE 'ALTER SESSION DISABLE PARALLEL DML';
+END;
+/
+```
+
+### 3. **Application-Level Strategy**
+```java
+// In your batch configuration, handle different areas differently
+if (area <= 20) {
+    // Use regular procedure - these complete in seconds
+    callProcedure("ENTITYDEV.riskcalc", area);
+} else if (area <= 22) {
+    // Use parallel wrapper with 2-hour timeout
+    callProcedure("ENTITYDEV.riskcalc_parallel", area, 7200000);
+} else {
+    // Areas 23+ need special handling
+    callProcedure("ENTITYDEV.riskcalc_parallel_heavy", area, 10800000); // 3 hours
+}
+```
+
+### 4. **Add Progress Monitoring**
+```sql
+-- Create a progress tracking table
+CREATE TABLE riskcalc_progress (
+    area NUMBER,
+    start_time TIMESTAMP,
+    last_update TIMESTAMP,
+    records_processed NUMBER,
+    status VARCHAR2(20)
+);
+
+-- Modify your procedure to update progress
+-- This helps identify if it's hung or just slow
+```
+
+### 5. **Consider Splitting Problem Areas**
+```sql
+-- For Area 23+, process in smaller chunks
+CREATE OR REPLACE PROCEDURE riskcalc_area23_special
+IS
+BEGIN
+    -- Process high-risk records first
+    UPDATE ent SET risk = 999 
+    WHERE tinsid IN (
+        SELECT tinsid FROM entmod 
+        WHERE emodsid = 23 
+        AND /* high risk criteria */
+    );
+    COMMIT;
+    
+    -- Then process remaining records
+    -- This prevents timeout on critical updates
+END;
+```
+
+## **Immediate Actions:**
+
+1. **Set different timeouts by area** rather than a blanket 5-hour timeout
+2. **Monitor what Area 23 is doing** when it hangs - it might be hitting a different bottleneck
+3. **Check for blocking locks** during Area 23 execution:
+```sql
+SELECT blocking_session, sid, serial#, wait_class, seconds_in_wait
+FROM v$session
+WHERE blocking_session IS NOT NULL;
+```
+
+## **Why 5-hour timeout is risky:**
+- Masks underlying problems
+- Ties up database resources
+- Could cascade delays to other processes
+- May still fail for areas beyond 23
+
+The fact that Area 23 is timing out after only 12 minutes (compared to Area 22's 77 minutes) suggests something different is happening - possibly lock contention or a different data pattern that's causing issues.
