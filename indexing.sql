@@ -34,3 +34,38 @@ BEGIN
     EXECUTE IMMEDIATE 'ALTER SESSION DISABLE PARALLEL DML';
 END;
 /
+
+
+
+-- First, check existing indexes
+SELECT index_name, column_name, column_position
+FROM user_ind_columns
+WHERE table_name IN ('ENTMOD', 'TRANTRAIL', 'ENT')
+ORDER BY table_name, index_name, column_position;
+
+-- Then create these indexes in order of importance:
+
+-- 1. Most critical - for all the UPDATE statements
+CREATE UNIQUE INDEX idx_ent_tinsid ON ent(tinsid);
+
+-- 2. For the TRANTRAIL subquery in entcur1
+CREATE INDEX idx_trantrail_risk ON trantrail(
+    status,
+    segind,
+    tinsid
+);
+
+-- 3. For ENTMOD main query
+CREATE INDEX idx_entmod_risk ON entmod(
+    tinsid,
+    status
+);
+
+-- 4. For entcur2 
+CREATE INDEX idx_entmod_entcur2 ON entmod(
+    emodsid,
+    status,
+    type,
+    period,
+    mft
+);
