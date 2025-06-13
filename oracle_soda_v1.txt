@@ -1,0 +1,1283 @@
+// =============================================================================
+// FILE: src/main/java/com/example/sodademo/model/EntModDocument.java
+// =============================================================================
+package com.example.sodademo.model;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonFormat;
+import java.math.BigDecimal;
+import java.util.Date;
+
+/**
+ * Entity Model Document representing ENTITYDEV.ENTMOD table structure
+ * Optimized for SODA operations with 10+ million records
+ */
+public class EntModDocument {
+    
+    // Primary identifiers - most frequently queried
+    @JsonProperty("EMODSID")
+    private Long emodsId;
+    
+    @JsonProperty("ROID")
+    private Integer roId;
+    
+    @JsonProperty("TYPEID")
+    private Integer typeId;
+    
+    // Date fields - commonly used for filtering and partitioning
+    @JsonProperty("ASSNRO")
+    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd")
+    private Date assnRo;
+    
+    @JsonProperty("PERIOD")
+    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd")
+    private Date period;
+    
+    @JsonProperty("DUEDATE")
+    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd")
+    private Date dueDate;
+    
+    @JsonProperty("CREATEDT")
+    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd")
+    private Date createDt;
+    
+    // Financial fields - frequently aggregated
+    @JsonProperty("BALANCE")
+    private BigDecimal balance;
+    
+    @JsonProperty("LRA")
+    private BigDecimal lra;
+    
+    // Key business fields
+    @JsonProperty("MFT")
+    private Integer mft;
+    
+    @JsonProperty("NMFPRD")
+    private Integer nmfPrd;
+    
+    @JsonProperty("TYPE")
+    private String type;
+    
+    @JsonProperty("CYCLE")
+    private Integer cycle;
+    
+    @JsonProperty("STATUS")
+    private String status;
+    
+    // Code fields - used for categorization
+    @JsonProperty("CIVPCD")
+    private String civpCd;
+    
+    @JsonProperty("SELCODE")
+    private String selCode;
+    
+    @JsonProperty("SUBCODE2")
+    private String subCode2;
+    
+    @JsonProperty("EXAMCODE")
+    private Integer examCode;
+    
+    // Indicator fields
+    @JsonProperty("LFIIND")
+    private String lfiInd;
+    
+    @JsonProperty("FTLCD")
+    private String ftlCd;
+    
+    @JsonProperty("CSEDIND")
+    private String csedInd;
+    
+    @JsonProperty("ASEDIND")
+    private String asedInd;
+    
+    @JsonProperty("AGEIND")
+    private String ageInd;
+    
+    @JsonProperty("POAIND")
+    private String poaInd;
+    
+    @JsonProperty("PYRIND")
+    private String pyrInd;
+    
+    // Tax and compliance fields
+    @JsonProperty("TAXCYC")
+    private Integer taxCyc;
+    
+    @JsonProperty("SPECPRJCD")
+    private Integer specPrjCd;
+    
+    @JsonProperty("TC583DEFINERCD")
+    private String tc583DefineRcd;
+    
+    @JsonProperty("TDICR")
+    private Integer tdiCr;
+    
+    @JsonProperty("TCSCC")
+    private Integer tcScc;
+    
+    @JsonProperty("TC")
+    private Integer tc;
+
+    // Constructors
+    public EntModDocument() {}
+
+    // Essential getters and setters for frequently accessed fields
+    public Long getEmodsId() { return emodsId; }
+    public void setEmodsId(Long emodsId) { this.emodsId = emodsId; }
+
+    public Integer getRoId() { return roId; }
+    public void setRoId(Integer roId) { this.roId = roId; }
+
+    public Date getPeriod() { return period; }
+    public void setPeriod(Date period) { this.period = period; }
+
+    public BigDecimal getBalance() { return balance; }
+    public void setBalance(BigDecimal balance) { this.balance = balance; }
+
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
+
+    public Integer getTypeId() { return typeId; }
+    public void setTypeId(Integer typeId) { this.typeId = typeId; }
+
+    // Add other getters/setters as needed...
+}
+
+// =============================================================================
+// FILE: src/main/java/com/example/sodademo/service/EntModSodaService.java
+// =============================================================================
+package com.example.sodademo.service;
+
+import oracle.soda.OracleCollection;
+import oracle.soda.OracleDatabase;
+import oracle.soda.OracleDocument;
+import oracle.soda.OracleException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
+
+@Service
+public class EntModSodaService {
+
+    private static final Logger logger = LoggerFactory.getLogger(EntModSodaService.class);
+    private static final String COLLECTION_NAME = "entmod_collection";
+    private static final int MAX_BATCH_SIZE = 2000; // Optimized for ENTMOD data
+    private static final int DEFAULT_BATCH_SIZE = 500;
+
+    @Autowired
+    private OracleDatabase oracleDatabase;
+
+    private OracleCollection getCollection() throws OracleException {
+        OracleCollection collection = oracleDatabase.openCollection(COLLECTION_NAME);
+        if (collection == null) {
+            logger.info("Creating ENTMOD collection with optimized settings");
+            // Create collection with metadata optimized for ENTMOD table
+            String metadata = """
+                {
+                  "keyColumn": {"name": "ID"},
+                  "contentColumn": {"name": "JSON_DOCUMENT", "sqlType": "CLOB"},
+                  "versionColumn": {"name": "VERSION"},
+                  "lastModifiedColumn": {"name": "LAST_MODIFIED"},
+                  "creationTimeColumn": {"name": "CREATED_ON"}
+                }
+                """;
+            collection = oracleDatabase.admin().createCollection(COLLECTION_NAME, metadata);
+        }
+        return collection;
+    }
+
+    // Optimized queries for common ENTMOD use cases
+
+    /**
+     * Get records by RO ID with pagination - most common query pattern
+     */
+    public PaginatedResult getByRoId(Integer roId, int page, int pageSize) throws OracleException {
+        String filter = String.format("{\"ROID\": %d}", roId);
+        return getDocumentsOptimized(filter, page, pageSize, 
+            new String[]{"EMODSID", "ROID", "PERIOD", "BALANCE", "STATUS", "TYPE"});
+    }
+
+    /**
+     * Get records by period range - common for financial reporting
+     */
+    public PaginatedResult getByPeriodRange(LocalDate startDate, LocalDate endDate, 
+                                          int page, int pageSize) throws OracleException {
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+        String filter = String.format("""
+            {
+              "PERIOD": {
+                "$gte": "%s",
+                "$lte": "%s"
+              }
+            }
+            """, startDate.format(formatter), endDate.format(formatter));
+        
+        return getDocumentsOptimized(filter, page, pageSize,
+            new String[]{"EMODSID", "ROID", "PERIOD", "BALANCE", "STATUS", "DUEDATE"});
+    }
+
+    /**
+     * Get records by status and type - common operational query
+     */
+    public PaginatedResult getByStatusAndType(String status, String type, 
+                                            int page, int pageSize) throws OracleException {
+        String filter = String.format("""
+            {
+              "STATUS": "%s",
+              "TYPE": "%s"
+            }
+            """, status, type);
+        
+        return getDocumentsOptimized(filter, page, pageSize,
+            new String[]{"EMODSID", "ROID", "PERIOD", "BALANCE", "STATUS", "TYPE", "DUEDATE"});
+    }
+
+    /**
+     * Get records with balance above threshold - financial analysis
+     */
+    public PaginatedResult getByBalanceThreshold(BigDecimal minBalance, 
+                                               int page, int pageSize) throws OracleException {
+        String filter = String.format("""
+            {
+              "BALANCE": {
+                "$gte": %s
+              }
+            }
+            """, minBalance.toString());
+        
+        return getDocumentsOptimized(filter, page, pageSize,
+            new String[]{"EMODSID", "ROID", "BALANCE", "PERIOD", "STATUS"});
+    }
+
+    /**
+     * Complex query: Active records for specific RO with recent periods
+     */
+    public PaginatedResult getActiveRecentByRoId(Integer roId, LocalDate sinceDate,
+                                                int page, int pageSize) throws OracleException {
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+        String filter = String.format("""
+            {
+              "$and": [
+                {"ROID": %d},
+                {"STATUS": {"$ne": "CLOSED"}},
+                {"PERIOD": {"$gte": "%s"}}
+              ]
+            }
+            """, roId, sinceDate.format(formatter));
+        
+        return getDocumentsOptimized(filter, page, pageSize,
+            new String[]{"EMODSID", "ROID", "PERIOD", "BALANCE", "STATUS", "DUEDATE", "TYPE"});
+    }
+
+    /**
+     * Stream processing for bulk operations - optimized for ENTMOD volume
+     */
+    public void streamProcessByRoIds(List<Integer> roIds, 
+                                   Consumer<List<String>> batchProcessor) throws OracleException {
+        if (roIds.isEmpty()) return;
+
+        // Build efficient OR query for multiple RO IDs
+        StringBuilder filterBuilder = new StringBuilder("{\"$or\": [");
+        for (int i = 0; i < roIds.size(); i++) {
+            filterBuilder.append(String.format("{\"ROID\": %d}", roIds.get(i)));
+            if (i < roIds.size() - 1) {
+                filterBuilder.append(", ");
+            }
+        }
+        filterBuilder.append("]}");
+
+        streamProcessDocuments(filterBuilder.toString(), batchProcessor, DEFAULT_BATCH_SIZE);
+    }
+
+    /**
+     * Aggregate balance by RO ID - financial summary
+     */
+    public Map<Integer, BalanceSummary> getBalanceSummaryByRoIds(List<Integer> roIds) throws OracleException {
+        Map<Integer, BalanceSummary> summary = new HashMap<>();
+        
+        streamProcessByRoIds(roIds, batch -> {
+            batch.forEach(docJson -> {
+                try {
+                    // Parse JSON and aggregate (simplified - in production use proper JSON parsing)
+                    // This is a demonstration - you'd use Jackson ObjectMapper here
+                    summary.computeIfAbsent(extractRoId(docJson), k -> new BalanceSummary())
+                           .addBalance(extractBalance(docJson));
+                } catch (Exception e) {
+                    logger.error("Error processing document for balance summary", e);
+                }
+            });
+        });
+        
+        return summary;
+    }
+
+    /**
+     * Get overdue records - operational monitoring
+     */
+    public PaginatedResult getOverdueRecords(LocalDate asOfDate, int page, int pageSize) throws OracleException {
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+        String filter = String.format("""
+            {
+              "$and": [
+                {"DUEDATE": {"$lt": "%s"}},
+                {"STATUS": {"$nin": ["PAID", "CLOSED", "CANCELLED"]}}
+              ]
+            }
+            """, asOfDate.format(formatter));
+        
+        return getDocumentsOptimized(filter, page, pageSize,
+            new String[]{"EMODSID", "ROID", "DUEDATE", "BALANCE", "STATUS", "PERIOD"});
+    }
+
+    // Core optimized methods
+
+    private PaginatedResult getDocumentsOptimized(String filterSpec, int page, int pageSize, 
+                                                String[] projectionFields) throws OracleException {
+        if (pageSize > MAX_BATCH_SIZE) {
+            throw new IllegalArgumentException("Page size cannot exceed " + MAX_BATCH_SIZE);
+        }
+
+        OracleCollection collection = getCollection();
+        int skip = page * pageSize;
+
+        // Build projection
+        String projection = buildProjection(projectionFields);
+
+        List<String> documents = new ArrayList<>();
+        for (OracleDocument doc : collection.find()
+                .filter(filterSpec)
+                .projection(projection)
+                .skip(skip)
+                .limit(pageSize)
+                .getDocuments()) {
+            documents.add(doc.getContentAsString());
+        }
+
+        // Get count only for first page to avoid expensive operations
+        long totalCount = 0;
+        if (page == 0) {
+            totalCount = collection.find().filter(filterSpec).count();
+        }
+
+        return new PaginatedResult(documents, totalCount, page, pageSize);
+    }
+
+    private void streamProcessDocuments(String filterSpec, Consumer<List<String>> batchProcessor, 
+                                      int batchSize) throws OracleException {
+        OracleCollection collection = getCollection();
+        int skip = 0;
+        int processedCount = 0;
+
+        logger.info("Starting ENTMOD stream processing with batch size: {}", batchSize);
+
+        while (true) {
+            List<String> batch = new ArrayList<>();
+            
+            for (OracleDocument doc : collection.find()
+                    .filter(filterSpec)
+                    .skip(skip)
+                    .limit(batchSize)
+                    .getDocuments()) {
+                batch.add(doc.getContentAsString());
+            }
+
+            if (batch.isEmpty()) break;
+
+            try {
+                batchProcessor.accept(batch);
+                processedCount += batch.size();
+                
+                if (processedCount % 10000 == 0) {
+                    logger.info("Processed {} ENTMOD records", processedCount);
+                }
+            } catch (Exception e) {
+                logger.error("Error processing ENTMOD batch at skip: {}", skip, e);
+                throw new RuntimeException("ENTMOD batch processing failed", e);
+            }
+
+            skip += batchSize;
+        }
+
+        logger.info("ENTMOD stream processing completed. Total records processed: {}", processedCount);
+    }
+
+    private String buildProjection(String[] fields) {
+        if (fields == null || fields.length == 0) {
+            return null; // Return all fields
+        }
+
+        StringBuilder projection = new StringBuilder("{");
+        for (int i = 0; i < fields.length; i++) {
+            projection.append("\"").append(fields[i]).append("\": 1");
+            if (i < fields.length - 1) {
+                projection.append(", ");
+            }
+        }
+        projection.append("}");
+        return projection.toString();
+    }
+
+    // Helper methods for JSON parsing (simplified - use Jackson in production)
+    private Integer extractRoId(String json) {
+        // Simplified extraction - use proper JSON parsing in production
+        return 1; // Placeholder
+    }
+
+    private BigDecimal extractBalance(String json) {
+        // Simplified extraction - use proper JSON parsing in production
+        return BigDecimal.ZERO; // Placeholder
+    }
+
+    // Inner classes
+    public static class PaginatedResult {
+        private final List<String> documents;
+        private final long totalCount;
+        private final int page;
+        private final int pageSize;
+        private final boolean hasMore;
+
+        public PaginatedResult(List<String> documents, long totalCount, int page, int pageSize) {
+            this.documents = documents;
+            this.totalCount = totalCount;
+            this.page = page;
+            this.pageSize = pageSize;
+            this.hasMore = (page + 1) * pageSize < totalCount;
+        }
+
+        // Getters
+        public List<String> getDocuments() { return documents; }
+        public long getTotalCount() { return totalCount; }
+        public int getPage() { return page; }
+        public int getPageSize() { return pageSize; }
+        public boolean hasMore() { return hasMore; }
+        public int getReturnedCount() { return documents.size(); }
+    }
+
+    public static class BalanceSummary {
+        private BigDecimal totalBalance = BigDecimal.ZERO;
+        private int count = 0;
+
+        public void addBalance(BigDecimal balance) {
+            if (balance != null) {
+                totalBalance = totalBalance.add(balance);
+                count++;
+            }
+        }
+
+        public BigDecimal getTotalBalance() { return totalBalance; }
+        public int getCount() { return count; }
+        public BigDecimal getAverageBalance() {
+            return count > 0 ? totalBalance.divide(BigDecimal.valueOf(count)) : BigDecimal.ZERO;
+        }
+    }
+}
+
+// =============================================================================
+// FILE: src/main/java/com/example/sodademo/controller/EntModController.java
+// =============================================================================
+package com.example.sodademo.controller;
+
+import com.example.sodademo.service.EntModSodaService;
+import oracle.soda.OracleException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+@RestController
+@RequestMapping("/api/entmod")
+@CrossOrigin(origins = "*")
+public class EntModController {
+
+    private static final Logger logger = LoggerFactory.getLogger(EntModController.class);
+
+    @Autowired
+    private EntModSodaService entModService;
+
+    /**
+     * Get records by RO ID - most common query
+     * GET /api/entmod/ro/12345?page=0&size=100
+     */
+    @GetMapping("/ro/{roId}")
+    public ResponseEntity<?> getByRoId(
+            @PathVariable Integer roId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "100") int size) {
+        
+        try {
+            logger.info("ENTMOD query by RO ID: {}, page: {}, size: {}", roId, page, size);
+            
+            EntModSodaService.PaginatedResult result = entModService.getByRoId(roId, page, size);
+            
+            return ResponseEntity.ok(Map.of(
+                "data", result.getDocuments(),
+                "pagination", Map.of(
+                    "page", result.getPage(),
+                    "size", result.getPageSize(),
+                    "totalCount", result.getTotalCount(),
+                    "returned", result.getReturnedCount(),
+                    "hasMore", result.hasMore()
+                ),
+                "roId", roId
+            ));
+            
+        } catch (OracleException e) {
+            logger.error("Error querying ENTMOD by RO ID: {}", roId, e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(createErrorResponse("Database error", e.getMessage()));
+        }
+    }
+
+    /**
+     * Get records by period range
+     * GET /api/entmod/period?start=2023-01-01&end=2023-12-31&page=0&size=100
+     */
+    @GetMapping("/period")
+    public ResponseEntity<?> getByPeriodRange(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate start,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate end,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "100") int size) {
+        
+        try {
+            logger.info("ENTMOD query by period range: {} to {}, page: {}, size: {}", 
+                       start, end, page, size);
+            
+            EntModSodaService.PaginatedResult result = 
+                entModService.getByPeriodRange(start, end, page, size);
+            
+            return ResponseEntity.ok(Map.of(
+                "data", result.getDocuments(),
+                "pagination", Map.of(
+                    "page", result.getPage(),
+                    "size", result.getPageSize(),
+                    "totalCount", result.getTotalCount(),
+                    "returned", result.getReturnedCount(),
+                    "hasMore", result.hasMore()
+                ),
+                "periodRange", Map.of("start", start, "end", end)
+            ));
+            
+        } catch (OracleException e) {
+            logger.error("Error querying ENTMOD by period range", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(createErrorResponse("Period range query error", e.getMessage()));
+        }
+    }
+
+    /**
+     * Get records by status and type
+     * GET /api/entmod/status/ACTIVE/type/A?page=0&size=100
+     */
+    @GetMapping("/status/{status}/type/{type}")
+    public ResponseEntity<?> getByStatusAndType(
+            @PathVariable String status,
+            @PathVariable String type,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "100") int size) {
+        
+        try {
+            logger.info("ENTMOD query by status: {} and type: {}, page: {}, size: {}", 
+                       status, type, page, size);
+            
+            EntModSodaService.PaginatedResult result = 
+                entModService.getByStatusAndType(status, type, page, size);
+            
+            return ResponseEntity.ok(Map.of(
+                "data", result.getDocuments(),
+                "pagination", Map.of(
+                    "page", result.getPage(),
+                    "size", result.getPageSize(),
+                    "totalCount", result.getTotalCount(),
+                    "returned", result.getReturnedCount(),
+                    "hasMore", result.hasMore()
+                ),
+                "filters", Map.of("status", status, "type", type)
+            ));
+            
+        } catch (OracleException e) {
+            logger.error("Error querying ENTMOD by status and type", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(createErrorResponse("Status/Type query error", e.getMessage()));
+        }
+    }
+
+    /**
+     * Get records with balance above threshold
+     * GET /api/entmod/balance/above/10000?page=0&size=100
+     */
+    @GetMapping("/balance/above/{amount}")
+    public ResponseEntity<?> getByBalanceThreshold(
+            @PathVariable BigDecimal amount,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "100") int size) {
+        
+        try {
+            logger.info("ENTMOD query by balance > {}, page: {}, size: {}", amount, page, size);
+            
+            EntModSodaService.PaginatedResult result = 
+                entModService.getByBalanceThreshold(amount, page, size);
+            
+            return ResponseEntity.ok(Map.of(
+                "data", result.getDocuments(),
+                "pagination", Map.of(
+                    "page", result.getPage(),
+                    "size", result.getPageSize(),
+                    "totalCount", result.getTotalCount(),
+                    "returned", result.getReturnedCount(),
+                    "hasMore", result.hasMore()
+                ),
+                "balanceThreshold", amount
+            ));
+            
+        } catch (OracleException e) {
+            logger.error("Error querying ENTMOD by balance threshold", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(createErrorResponse("Balance threshold query error", e.getMessage()));
+        }
+    }
+
+    /**
+     * Get overdue records
+     * GET /api/entmod/overdue?asOfDate=2024-01-01&page=0&size=100
+     */
+    @GetMapping("/overdue")
+    public ResponseEntity<?> getOverdueRecords(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate asOfDate,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "100") int size) {
+        
+        if (asOfDate == null) {
+            asOfDate = LocalDate.now();
+        }
+        
+        try {
+            logger.info("ENTMOD overdue query as of: {}, page: {}, size: {}", asOfDate, page, size);
+            
+            EntModSodaService.PaginatedResult result = 
+                entModService.getOverdueRecords(asOfDate, page, size);
+            
+            return ResponseEntity.ok(Map.of(
+                "data", result.getDocuments(),
+                "pagination", Map.of(
+                    "page", result.getPage(),
+                    "size", result.getPageSize(),
+                    "totalCount", result.getTotalCount(),
+                    "returned", result.getReturnedCount(),
+                    "hasMore", result.hasMore()
+                ),
+                "asOfDate", asOfDate
+            ));
+            
+        } catch (OracleException e) {
+            logger.error("Error querying overdue ENTMOD records", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(createErrorResponse("Overdue records query error", e.getMessage()));
+        }
+    }
+
+    /**
+     * Get balance summary for multiple RO IDs
+     * POST /api/entmod/balance/summary
+     * Body: {"roIds": [12345, 67890, 11111]}
+     */
+    @PostMapping("/balance/summary")
+    public ResponseEntity<?> getBalanceSummary(@RequestBody Map<String, List<Integer>> request) {
+        try {
+            List<Integer> roIds = request.get("roIds");
+            if (roIds == null || roIds.isEmpty()) {
+                return ResponseEntity.badRequest()
+                        .body(createErrorResponse("Invalid request", "roIds list is required"));
+            }
+            
+            if (roIds.size() > 1000) {
+                return ResponseEntity.badRequest()
+                        .body(createErrorResponse("Too many RO IDs", "Maximum 1000 RO IDs allowed"));
+            }
+            
+            logger.info("ENTMOD balance summary for {} RO IDs", roIds.size());
+            
+            Map<Integer, EntModSodaService.BalanceSummary> summary = 
+                entModService.getBalanceSummaryByRoIds(roIds);
+            
+            return ResponseEntity.ok(Map.of(
+                "balanceSummary", summary,
+                "requestedRoIds", roIds.size(),
+                "processedRoIds", summary.size()
+            ));
+            
+        } catch (OracleException e) {
+            logger.error("Error generating balance summary", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(createErrorResponse("Balance summary error", e.getMessage()));
+        }
+    }
+
+    private Map<String, Object> createErrorResponse(String error, String message) {
+        Map<String, Object> errorResponse = new HashMap<>();
+        errorResponse.put("error", error);
+        errorResponse.put("message", message);
+        errorResponse.put("timestamp", System.currentTimeMillis());
+        return errorResponse;
+    }
+}
+
+// =============================================================================
+// FILE: Database Setup SQL for ENTMOD SODA Collection
+// =============================================================================
+/*
+-- CRITICAL: Create these indexes for optimal performance with 10M+ records
+
+-- 1. Primary lookup index on RO ID (most common query)
+CREATE INDEX IDX_ENTMOD_ROID ON entmod_collection (JSON_VALUE(JSON_DOCUMENT, '$.ROID'));
+
+-- 2. Period range queries
+CREATE INDEX IDX_ENTMOD_PERIOD ON entmod_collection (JSON_VALUE(JSON_DOCUMENT, '$.PERIOD'));
+
+-- 3. Status-based queries
+CREATE INDEX IDX_ENTMOD_STATUS ON entmod_collection (JSON_VALUE(JSON_DOCUMENT, '$.STATUS'));
+
+-- 4. Due date for overdue queries
+CREATE INDEX IDX_ENTMOD_DUEDATE ON entmod_collection (JSON_VALUE(JSON_DOCUMENT, '$.DUEDATE'));
+
+-- 5. Balance for financial queries
+CREATE INDEX IDX_ENTMOD_BALANCE ON entmod_collection (JSON_VALUE(JSON_DOCUMENT, '$.BALANCE'));
+
+-- 6. Composite index for common query patterns
+CREATE INDEX IDX_ENTMOD_ROID_PERIOD ON entmod_collection (
+    JSON_VALUE(JSON_DOCUMENT, '$.ROID'),
+    JSON_VALUE(JSON_DOCUMENT, '$.PERIOD')
+);
+
+-- 7. Composite index for status and type queries
+CREATE INDEX IDX_ENTMOD_STATUS_TYPE ON entmod_collection (
+    JSON_VALUE(JSON_DOCUMENT, '$.STATUS'),
+    JSON_VALUE(JSON_DOCUMENT, '$.TYPE')
+);
+
+-- 8. Enable JSON search index for text-based searches
+CREATE SEARCH INDEX entmod_search_idx ON entmod_collection (JSON_DOCUMENT) FOR JSON;
+
+-- 9. Consider partitioning for very large datasets (optional)
+-- Partition by PERIOD for better performance on date range queries
+ALTER TABLE entmod_collection 
+PARTITION BY RANGE (JSON_VALUE(JSON_DOCUMENT, '$.PERIOD'))
+INTERVAL (NUMTOYMINTERVAL(1, 'MONTH'))
+(
+  PARTITION p_before_2020 VALUES LESS THAN (DATE '2020-01-01')
+);
+
+-- 10. Enable parallel DML for bulk operations
+ALTER SESSION ENABLE PARALLEL DML;
+*/
+
+
+
+
+
+
+// =============================================================================
+// FILE: src/main/resources/application-entmod-prod.properties
+// =============================================================================
+# ENTMOD Production Configuration for 10M+ Records
+
+# Server Configuration - Optimized for high load
+server.port=8080
+server.tomcat.max-threads=300
+server.tomcat.max-connections=10000
+server.tomcat.accept-count=200
+
+# Oracle Database Configuration - ENTMOD Specific
+spring.datasource.url=jdbc:oracle:thin:@${DB_HOST:localhost}:${DB_PORT:1521}:${DB_SID:XE}
+spring.datasource.username=${DB_USERNAME}
+spring.datasource.password=${DB_PASSWORD}
+spring.datasource.driver-class-name=oracle.jdbc.OracleDriver
+
+# Connection Pool - Optimized for ENTMOD volume
+spring.datasource.hikari.pool-name=EntModSodaPool
+spring.datasource.hikari.maximum-pool-size=80
+spring.datasource.hikari.minimum-idle=20
+spring.datasource.hikari.connection-timeout=30000
+spring.datasource.hikari.idle-timeout=300000
+spring.datasource.hikari.max-lifetime=1200000
+spring.datasource.hikari.leak-detection-threshold=60000
+
+# Oracle Performance Optimizations for ENTMOD
+spring.datasource.hikari.data-source-properties.oracle.net.CONNECT_TIMEOUT=30000
+spring.datasource.hikari.data-source-properties.oracle.net.READ_TIMEOUT=120000
+spring.datasource.hikari.data-source-properties.oracle.jdbc.ReadTimeout=120000
+spring.datasource.hikari.data-source-properties.oracle.jdbc.defaultRowPrefetch=100
+spring.datasource.hikari.data-source-properties.oracle.jdbc.defaultBatchValue=50
+
+# SODA Specific Configuration
+entmod.soda.collection.name=entmod_collection
+entmod.soda.batch.size.default=500
+entmod.soda.batch.size.max=2000
+entmod.soda.page.size.max=1000
+entmod.soda.query.timeout=300000
+
+# Caching Configuration for ENTMOD metadata
+spring.cache.type=caffeine
+spring.cache.caffeine.spec=maximumSize=10000,expireAfterAccess=3600s
+
+# Logging Configuration
+logging.level.root=WARN
+logging.level.com.example.sodademo=INFO
+logging.level.oracle.soda=WARN
+logging.level.org.springframework.jdbc=WARN
+
+# Performance Monitoring
+management.endpoints.web.exposure.include=health,metrics,prometheus,info
+management.endpoint.health.show-details=when-authorized
+management.metrics.export.prometheus.enabled=true
+
+# JVM Recommendations (add to startup script):
+# -Xms4g -Xmx16g 
+# -XX:+UseG1GC 
+# -XX:MaxGCPauseMillis=200 
+# -XX:+UseStringDeduplication
+# -XX:+ParallelRefProcEnabled
+
+// =============================================================================
+// FILE: src/main/java/com/example/sodademo/config/EntModSodaConfig.java
+// =============================================================================
+package com.example.sodademo.config;
+
+import oracle.soda.OracleDatabase;
+import oracle.soda.rdbms.OracleRDBMSClient;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
+
+import javax.sql.DataSource;
+import java.sql.Connection;
+import java.sql.SQLException;
+
+@Configuration
+@ConfigurationProperties(prefix = "entmod.soda")
+public class EntModSodaConfig {
+
+    private String collectionName = "entmod_collection";
+    private BatchConfig batch = new BatchConfig();
+    private int pageSizeMax = 1000;
+    private long queryTimeout = 300000;
+
+    @Autowired
+    private DataSource dataSource;
+
+    @Bean
+    @Primary
+    public OracleDatabase entModOracleDatabase() throws SQLException {
+        Connection connection = dataSource.getConnection();
+        
+        // Set connection properties for ENTMOD performance
+        connection.setAutoCommit(false);
+        
+        OracleRDBMSClient client = new OracleRDBMSClient();
+        OracleDatabase database = client.getDatabase(connection);
+        
+        return database;
+    }
+
+    // Configuration properties
+    public String getCollectionName() { return collectionName; }
+    public void setCollectionName(String collectionName) { this.collectionName = collectionName; }
+
+    public BatchConfig getBatch() { return batch; }
+    public void setBatch(BatchConfig batch) { this.batch = batch; }
+
+    public int getPageSizeMax() { return pageSizeMax; }
+    public void setPageSizeMax(int pageSizeMax) { this.pageSizeMax = pageSizeMax; }
+
+    public long getQueryTimeout() { return queryTimeout; }
+    public void setQueryTimeout(long queryTimeout) { this.queryTimeout = queryTimeout; }
+
+    public static class BatchConfig {
+        private int sizeDefault = 500;
+        private int sizeMax = 2000;
+
+        public int getSizeDefault() { return sizeDefault; }
+        public void setSizeDefault(int sizeDefault) { this.sizeDefault = sizeDefault; }
+
+        public int getSizeMax() { return sizeMax; }
+        public void setSizeMax(int sizeMax) { this.sizeMax = sizeMax; }
+    }
+}
+
+// =============================================================================
+// FILE: src/main/java/com/example/sodademo/monitoring/EntModMetrics.java
+// =============================================================================
+package com.example.sodademo.monitoring;
+
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
+
+import java.time.Duration;
+import java.util.concurrent.TimeUnit;
+
+@Component
+public class EntModMetrics {
+
+    private final MeterRegistry meterRegistry;
+    
+    // Counters
+    private final Counter queryByRoIdCounter;
+    private final Counter queryByPeriodCounter;
+    private final Counter queryOverdueCounter;
+    private final Counter queryErrorCounter;
+    
+    // Timers
+    private final Timer queryExecutionTimer;
+    private final Timer streamProcessingTimer;
+    
+    @Autowired
+    public EntModMetrics(MeterRegistry meterRegistry) {
+        this.meterRegistry = meterRegistry;
+        
+        // Initialize counters
+        this.queryByRoIdCounter = Counter.builder("entmod.query.roid")
+                .description("Number of queries by RO ID")
+                .register(meterRegistry);
+                
+        this.queryByPeriodCounter = Counter.builder("entmod.query.period")
+                .description("Number of queries by period range")
+                .register(meterRegistry);
+                
+        this.queryOverdueCounter = Counter.builder("entmod.query.overdue")
+                .description("Number of overdue queries")
+                .register(meterRegistry);
+                
+        this.queryErrorCounter = Counter.builder("entmod.query.errors")
+                .description("Number of query errors")
+                .register(meterRegistry);
+        
+        // Initialize timers
+        this.queryExecutionTimer = Timer.builder("entmod.query.execution.time")
+                .description("Query execution time")
+                .register(meterRegistry);
+                
+        this.streamProcessingTimer = Timer.builder("entmod.stream.processing.time")
+                .description("Stream processing time")
+                .register(meterRegistry);
+    }
+
+    // Counter methods
+    public void incrementRoIdQuery() {
+        queryByRoIdCounter.increment();
+    }
+
+    public void incrementPeriodQuery() {
+        queryByPeriodCounter.increment();
+    }
+
+    public void incrementOverdueQuery() {
+        queryOverdueCounter.increment();
+    }
+
+    public void incrementQueryError() {
+        queryErrorCounter.increment();
+    }
+
+    // Timer methods
+    public Timer.Sample startQueryTimer() {
+        return Timer.start(meterRegistry);
+    }
+
+    public void recordQueryTime(Timer.Sample sample) {
+        sample.stop(queryExecutionTimer);
+    }
+
+    public void recordQueryTime(Duration duration) {
+        queryExecutionTimer.record(duration.toMillis(), TimeUnit.MILLISECONDS);
+    }
+
+    public Timer.Sample startStreamProcessingTimer() {
+        return Timer.start(meterRegistry);
+    }
+
+    public void recordStreamProcessingTime(Timer.Sample sample) {
+        sample.stop(streamProcessingTimer);
+    }
+
+    // Custom metrics
+    public void recordResultSetSize(int size) {
+        meterRegistry.gauge("entmod.query.resultset.size", size);
+    }
+
+    public void recordPageSize(int pageSize) {
+        meterRegistry.gauge("entmod.query.page.size", pageSize);
+    }
+}
+
+// =============================================================================
+// FILE: src/main/java/com/example/sodademo/service/EntModPerformanceService.java
+// =============================================================================
+package com.example.sodademo.service;
+
+import com.example.sodademo.monitoring.EntModMetrics;
+import io.micrometer.core.instrument.Timer;
+import oracle.soda.OracleException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.stereotype.Service;
+
+import java.time.Duration;
+import java.time.Instant;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+
+/**
+ * Performance-enhanced service for ENTMOD operations with monitoring
+ */
+@Service
+public class EntModPerformanceService {
+
+    private static final Logger logger = LoggerFactory.getLogger(EntModPerformanceService.class);
+
+    @Autowired
+    private EntModSodaService entModSodaService;
+
+    @Autowired
+    private EntModMetrics metrics;
+
+    /**
+     * Get records by RO ID with performance monitoring
+     */
+    public EntModSodaService.PaginatedResult getByRoIdWithMetrics(Integer roId, int page, int pageSize) 
+            throws OracleException {
+        
+        Timer.Sample sample = metrics.startQueryTimer();
+        Instant start = Instant.now();
+        
+        try {
+            metrics.incrementRoIdQuery();
+            
+            EntModSodaService.PaginatedResult result = entModSodaService.getByRoId(roId, page, pageSize);
+            
+            metrics.recordResultSetSize(result.getReturnedCount());
+            metrics.recordPageSize(pageSize);
+            
+            Duration duration = Duration.between(start, Instant.now());
+            logger.info("RO ID query completed in {}ms, returned {} records", 
+                       duration.toMillis(), result.getReturnedCount());
+            
+            return result;
+            
+        } catch (OracleException e) {
+            metrics.incrementQueryError();
+            logger.error("Error in RO ID query performance service", e);
+            throw e;
+        } finally {
+            metrics.recordQueryTime(sample);
+        }
+    }
+
+    /**
+     * Cached lookup for frequently accessed RO metadata
+     */
+    @Cacheable(value = "roMetadata", key = "#roId")
+    public Map<String, Object> getRoMetadata(Integer roId) throws OracleException {
+        logger.debug("Cache miss for RO metadata: {}", roId);
+        
+        // Get basic RO information (implement based on your needs)
+        EntModSodaService.PaginatedResult result = entModSodaService.getByRoId(roId, 0, 1);
+        
+        // Extract and return metadata
+        return Map.of(
+            "roId", roId,
+            "hasRecords", !result.getDocuments().isEmpty(),
+            "lastChecked", Instant.now()
+        );
+    }
+
+    /**
+     * Async processing for large data operations
+     */
+    public CompletableFuture<Map<String, Object>> processLargeDatasetAsync(List<Integer> roIds) {
+        return CompletableFuture.supplyAsync(() -> {
+            Timer.Sample sample = metrics.startStreamProcessingTimer();
+            Instant start = Instant.now();
+            
+            try {
+                Map<Integer, EntModSodaService.BalanceSummary> summary = 
+                    entModSodaService.getBalanceSummaryByRoIds(roIds);
+                
+                Duration duration = Duration.between(start, Instant.now());
+                logger.info("Async processing completed in {}ms for {} RO IDs", 
+                           duration.toMillis(), roIds.size());
+                
+                return Map.of(
+                    "summary", summary,
+                    "processingTimeMs", duration.toMillis(),
+                    "processedCount", summary.size()
+                );
+                
+            } catch (Exception e) {
+                logger.error("Error in async processing", e);
+                throw new RuntimeException(e);
+            } finally {
+                metrics.recordStreamProcessingTime(sample);
+            }
+        });
+    }
+
+    /**
+     * Health check for ENTMOD service
+     */
+    public Map<String, Object> performHealthCheck() {
+        try {
+            Instant start = Instant.now();
+            
+            // Simple query to test database connectivity
+            EntModSodaService.PaginatedResult result = 
+                entModSodaService.getByRoId(1, 0, 1);
+            
+            Duration duration = Duration.between(start, Instant.now());
+            
+            return Map.of(
+                "status", "UP",
+                "responseTimeMs", duration.toMillis(),
+                "databaseConnected", true,
+                "sodaOperational", true
+            );
+            
+        } catch (Exception e) {
+            logger.error("Health check failed", e);
+            return Map.of(
+                "status", "DOWN",
+                "error", e.getMessage(),
+                "databaseConnected", false,
+                "sodaOperational", false
+            );
+        }
+    }
+}
+
+// =============================================================================
+// FILE: src/main/java/com/example/sodademo/controller/EntModHealthController.java
+// =============================================================================
+package com.example.sodademo.controller;
+
+import com.example.sodademo.service.EntModPerformanceService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.Map;
+
+@RestController
+@RequestMapping("/api/entmod/health")
+public class EntModHealthController {
+
+    @Autowired
+    private EntModPerformanceService performanceService;
+
+    @GetMapping
+    public ResponseEntity<Map<String, Object>> healthCheck() {
+        Map<String, Object> health = performanceService.performHealthCheck();
+        
+        if ("UP".equals(health.get("status"))) {
+            return ResponseEntity.ok(health);
+        } else {
+            return ResponseEntity.status(503).body(health);
+        }
+    }
+
+    @GetMapping("/detailed")
+    public ResponseEntity<Map<String, Object>> detailedHealth() {
+        Map<String, Object> health = performanceService.performHealthCheck();
+        
+        // Add additional details
+        health.put("jvmMemory", getMemoryInfo());
+        health.put("systemInfo", getSystemInfo());
+        
+        return ResponseEntity.ok(health);
+    }
+
+    private Map<String, Object> getMemoryInfo() {
+        Runtime runtime = Runtime.getRuntime();
+        return Map.of(
+            "maxMemoryMB", runtime.maxMemory() / (1024 * 1024),
+            "totalMemoryMB", runtime.totalMemory() / (1024 * 1024),
+            "freeMemoryMB", runtime.freeMemory() / (1024 * 1024),
+            "usedMemoryMB", (runtime.totalMemory() - runtime.freeMemory()) / (1024 * 1024)
+        );
+    }
+
+    private Map<String, Object> getSystemInfo() {
+        return Map.of(
+            "availableProcessors", Runtime.getRuntime().availableProcessors(),
+            "javaVersion", System.getProperty("java.version"),
+            "osName", System.getProperty("os.name")
+        );
+    }
+}
+
+// =============================================================================
+// FILE: Performance Testing Script (performance-test.sh)
+// =============================================================================
+#!/bin/bash
+
+# ENTMOD Performance Test Script
+# Usage: ./performance-test.sh <base_url> <ro_id>
+
+BASE_URL=${1:-"http://localhost:8080"}
+RO_ID=${2:-"12345"}
+
+echo "=== ENTMOD SODA Performance Test ==="
+echo "Base URL: $BASE_URL"
+echo "Test RO ID: $RO_ID"
+echo "==================================="
+
+# Test 1: Single RO ID query
+echo "Test 1: Single RO ID query (small page)"
+time curl -s "$BASE_URL/api/entmod/ro/$RO_ID?page=0&size=10" > /dev/null
+
+# Test 2: Large page query
+echo "Test 2: Large page query"
+time curl -s "$BASE_URL/api/entmod/ro/$RO_ID?page=0&size=500" > /dev/null
+
+# Test 3: Period range query
+echo "Test 3: Period range query"
+time curl -s "$BASE_URL/api/entmod/period?start=2023-01-01&end=2023-12-31&page=0&size=100" > /dev/null
+
+# Test 4: Balance threshold query
+echo "Test 4: Balance threshold query"
+time curl -s "$BASE_URL/api/entmod/balance/above/10000?page=0&size=100" > /dev/null
+
+# Test 5: Overdue records query
+echo "Test 5: Overdue records query"
+time curl -s "$BASE_URL/api/entmod/overdue?page=0&size=100" > /dev/null
+
+# Test 6: Health check
+echo "Test 6: Health check"
+curl -s "$BASE_URL/api/entmod/health" | jq '.'
+
+echo "=== Performance Test Complete ==="
