@@ -1,0 +1,605 @@
+// =============================================================================
+// FILE: pom.xml (Clean Version)
+// =============================================================================
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 
+         http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.2.0</version>
+        <relativePath/>
+    </parent>
+
+    <groupId>com.example</groupId>
+    <artifactId>oracle-soda-demo</artifactId>
+    <version>1.0.0</version>
+    <name>Oracle SODA Demo</name>
+    <description>Oracle SODA Spring Boot Demo Application</description>
+
+    <properties>
+        <java.version>11</java.version>
+        <oracle.version>23.3.0.23.09</oracle.version>
+        <maven.compiler.source>11</maven.compiler.source>
+        <maven.compiler.target>11</maven.compiler.target>
+    </properties>
+
+    <dependencies>
+        <!-- Spring Boot Web -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        
+        <!-- Spring Boot JDBC -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-jdbc</artifactId>
+        </dependency>
+
+        <!-- Oracle JDBC and SODA -->
+        <dependency>
+            <groupId>com.oracle.database.jdbc</groupId>
+            <artifactId>ojdbc11</artifactId>
+        </dependency>
+        
+        <dependency>
+            <groupId>com.oracle.database.soda</groupId>
+            <artifactId>orajsoda</artifactId>
+        </dependency>
+        
+        <!-- Oracle JSON -->
+        <dependency>
+            <groupId>com.oracle.database.json</groupId>
+            <artifactId>orajson</artifactId>
+        </dependency>
+
+        <!-- JSON Processing -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
+
+        <!-- Development Tools -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-devtools</artifactId>
+            <scope>runtime</scope>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- Testing -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+</project>
+
+// =============================================================================
+// FILE: src/main/java/com/example/sodademo/SodaDemoApplication.java
+// =============================================================================
+package com.example.sodademo;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class SodaDemoApplication {
+    public static void main(String[] args) {
+        SpringApplication.run(SodaDemoApplication.class, args);
+    }
+}
+
+// =============================================================================
+// FILE: src/main/java/com/example/sodademo/config/SodaConfig.java
+// =============================================================================
+package com.example.sodademo.config;
+
+import oracle.soda.OracleDatabase;
+import oracle.soda.rdbms.OracleRDBMSClient;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+import javax.sql.DataSource;
+import java.sql.Connection;
+import java.sql.SQLException;
+
+@Configuration
+public class SodaConfig {
+
+    @Autowired
+    private DataSource dataSource;
+
+    @Bean
+    public OracleDatabase oracleDatabase() throws SQLException {
+        Connection connection = dataSource.getConnection();
+        OracleRDBMSClient client = new OracleRDBMSClient();
+        return client.getDatabase(connection);
+    }
+}
+
+// =============================================================================
+// FILE: src/main/java/com/example/sodademo/model/EntModDocument.java
+// =============================================================================
+package com.example.sodademo.model;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+import java.math.BigDecimal;
+import java.util.Date;
+
+public class EntModDocument {
+    
+    @JsonProperty("EMODSID")
+    private Long emodsId;
+    
+    @JsonProperty("ROID")
+    private Integer roId;
+    
+    @JsonProperty("TYPEID")
+    private Integer typeId;
+    
+    @JsonProperty("PERIOD")
+    private Date period;
+    
+    @JsonProperty("BALANCE")
+    private BigDecimal balance;
+    
+    @JsonProperty("STATUS")
+    private String status;
+    
+    @JsonProperty("TYPE")
+    private String type;
+
+    // Constructors
+    public EntModDocument() {}
+
+    // Getters and Setters
+    public Long getEmodsId() { return emodsId; }
+    public void setEmodsId(Long emodsId) { this.emodsId = emodsId; }
+
+    public Integer getRoId() { return roId; }
+    public void setRoId(Integer roId) { this.roId = roId; }
+
+    public Integer getTypeId() { return typeId; }
+    public void setTypeId(Integer typeId) { this.typeId = typeId; }
+
+    public Date getPeriod() { return period; }
+    public void setPeriod(Date period) { this.period = period; }
+
+    public BigDecimal getBalance() { return balance; }
+    public void setBalance(BigDecimal balance) { this.balance = balance; }
+
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
+
+    public String getType() { return type; }
+    public void setType(String type) { this.type = type; }
+}
+
+// =============================================================================
+// FILE: src/main/java/com/example/sodademo/service/EntModSodaService.java
+// =============================================================================
+package com.example.sodademo.service;
+
+import oracle.soda.OracleCollection;
+import oracle.soda.OracleDatabase;
+import oracle.soda.OracleDocument;
+import oracle.soda.OracleException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.util.*;
+
+@Service
+public class EntModSodaService {
+
+    private static final Logger logger = LoggerFactory.getLogger(EntModSodaService.class);
+    private static final String COLLECTION_NAME = "entmod_collection";
+    private static final int MAX_BATCH_SIZE = 1000;
+
+    @Autowired
+    private OracleDatabase oracleDatabase;
+
+    private OracleCollection getCollection() throws OracleException {
+        OracleCollection collection = oracleDatabase.openCollection(COLLECTION_NAME);
+        if (collection == null) {
+            logger.info("Creating ENTMOD collection");
+            collection = oracleDatabase.admin().createCollection(COLLECTION_NAME);
+        }
+        return collection;
+    }
+
+    public PaginatedResult getByRoId(Integer roId, int page, int pageSize) throws OracleException {
+        String filter = "{\"ROID\": " + roId + "}";
+        return getDocumentsOptimized(filter, page, pageSize);
+    }
+
+    public PaginatedResult getByPeriodRange(LocalDate startDate, LocalDate endDate, 
+                                          int page, int pageSize) throws OracleException {
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+        String filter = "{" +
+            "\"PERIOD\": {" +
+            "\"$gte\": \"" + startDate.format(formatter) + "\"," +
+            "\"$lte\": \"" + endDate.format(formatter) + "\"" +
+            "}" +
+            "}";
+        
+        return getDocumentsOptimized(filter, page, pageSize);
+    }
+
+    public PaginatedResult getByStatusAndType(String status, String type, 
+                                            int page, int pageSize) throws OracleException {
+        String filter = "{" +
+            "\"STATUS\": \"" + status + "\"," +
+            "\"TYPE\": \"" + type + "\"" +
+            "}";
+        
+        return getDocumentsOptimized(filter, page, pageSize);
+    }
+
+    public PaginatedResult getByBalanceThreshold(BigDecimal minBalance, 
+                                               int page, int pageSize) throws OracleException {
+        String filter = "{" +
+            "\"BALANCE\": {" +
+            "\"$gte\": " + minBalance.toString() +
+            "}" +
+            "}";
+        
+        return getDocumentsOptimized(filter, page, pageSize);
+    }
+
+    public PaginatedResult getOverdueRecords(LocalDate asOfDate, int page, int pageSize) throws OracleException {
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+        String filter = "{" +
+            "\"$and\": [" +
+            "{\"DUEDATE\": {\"$lt\": \"" + asOfDate.format(formatter) + "\"}}," +
+            "{\"STATUS\": {\"$nin\": [\"PAID\", \"CLOSED\", \"CANCELLED\"]}}" +
+            "]" +
+            "}";
+        
+        return getDocumentsOptimized(filter, page, pageSize);
+    }
+
+    public PaginatedResult getDocumentsByFilter(String filterSpec, int page, int pageSize) throws OracleException {
+        return getDocumentsOptimized(filterSpec, page, pageSize);
+    }
+
+    public long getDocumentCount(String filterSpec) throws OracleException {
+        OracleCollection collection = getCollection();
+        if (filterSpec == null || filterSpec.trim().isEmpty()) {
+            return collection.find().count();
+        } else {
+            return collection.find().filter(filterSpec).count();
+        }
+    }
+
+    private PaginatedResult getDocumentsOptimized(String filterSpec, int page, int pageSize) throws OracleException {
+        if (pageSize > MAX_BATCH_SIZE) {
+            throw new IllegalArgumentException("Page size cannot exceed " + MAX_BATCH_SIZE);
+        }
+
+        OracleCollection collection = getCollection();
+        int skip = page * pageSize;
+
+        List<String> documents = new ArrayList<>();
+        
+        // Use getCursor() instead of getDocuments()
+        try (oracle.soda.OracleCursor cursor = collection.find()
+                .filter(filterSpec != null ? filterSpec : "{}")
+                .skip(skip)
+                .limit(pageSize)
+                .getCursor()) {
+            
+            while (cursor.hasNext()) {
+                OracleDocument doc = cursor.next();
+                documents.add(doc.getContentAsString());
+            }
+        }
+
+        long totalCount = 0;
+        if (page == 0) {
+            totalCount = collection.find()
+                    .filter(filterSpec != null ? filterSpec : "{}")
+                    .count();
+        }
+
+        return new PaginatedResult(documents, totalCount, page, pageSize);
+    }
+
+    public static class PaginatedResult {
+        private final List<String> documents;
+        private final long totalCount;
+        private final int page;
+        private final int pageSize;
+
+        public PaginatedResult(List<String> documents, long totalCount, int page, int pageSize) {
+            this.documents = documents;
+            this.totalCount = totalCount;
+            this.page = page;
+            this.pageSize = pageSize;
+        }
+
+        public List<String> getDocuments() { return documents; }
+        public long getTotalCount() { return totalCount; }
+        public int getPage() { return page; }
+        public int getPageSize() { return pageSize; }
+        public int getReturnedCount() { return documents.size(); }
+        public boolean hasMore() { return (page + 1) * pageSize < totalCount; }
+    }
+}
+
+// =============================================================================
+// FILE: src/main/java/com/example/sodademo/controller/EntModController.java
+// =============================================================================
+package com.example.sodademo.controller;
+
+import com.example.sodademo.service.EntModSodaService;
+import oracle.soda.OracleException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.util.HashMap;
+import java.util.Map;
+
+@RestController
+@RequestMapping("/api/entmod")
+@CrossOrigin(origins = "*")
+public class EntModController {
+
+    private static final Logger logger = LoggerFactory.getLogger(EntModController.class);
+
+    @Autowired
+    private EntModSodaService entModService;
+
+    @GetMapping("/health")
+    public ResponseEntity<Map<String, String>> health() {
+        Map<String, String> response = new HashMap<>();
+        try {
+            entModService.getDocumentCount("{}");
+            response.put("status", "UP");
+            response.put("service", "ENTMOD SODA API");
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            response.put("status", "DOWN");
+            response.put("error", e.getMessage());
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(response);
+        }
+    }
+
+    @GetMapping("/ro/{roId}")
+    public ResponseEntity<?> getByRoId(
+            @PathVariable Integer roId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "100") int size) {
+        
+        try {
+            logger.info("ENTMOD query by RO ID: {}, page: {}, size: {}", roId, page, size);
+            
+            EntModSodaService.PaginatedResult result = entModService.getByRoId(roId, page, size);
+            
+            return ResponseEntity.ok(createSuccessResponse(result, Map.of("roId", roId)));
+            
+        } catch (OracleException e) {
+            logger.error("Error querying ENTMOD by RO ID: {}", roId, e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(createErrorResponse("Database error", e.getMessage()));
+        }
+    }
+
+    @GetMapping("/period")
+    public ResponseEntity<?> getByPeriodRange(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate start,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate end,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "100") int size) {
+        
+        try {
+            logger.info("ENTMOD query by period range: {} to {}", start, end);
+            
+            EntModSodaService.PaginatedResult result = 
+                entModService.getByPeriodRange(start, end, page, size);
+            
+            return ResponseEntity.ok(createSuccessResponse(result, 
+                Map.of("periodRange", Map.of("start", start, "end", end))));
+            
+        } catch (OracleException e) {
+            logger.error("Error querying ENTMOD by period range", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(createErrorResponse("Period range query error", e.getMessage()));
+        }
+    }
+
+    @GetMapping("/status/{status}/type/{type}")
+    public ResponseEntity<?> getByStatusAndType(
+            @PathVariable String status,
+            @PathVariable String type,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "100") int size) {
+        
+        try {
+            logger.info("ENTMOD query by status: {} and type: {}", status, type);
+            
+            EntModSodaService.PaginatedResult result = 
+                entModService.getByStatusAndType(status, type, page, size);
+            
+            return ResponseEntity.ok(createSuccessResponse(result, 
+                Map.of("filters", Map.of("status", status, "type", type))));
+            
+        } catch (OracleException e) {
+            logger.error("Error querying ENTMOD by status and type", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(createErrorResponse("Status/Type query error", e.getMessage()));
+        }
+    }
+
+    @GetMapping("/balance/above/{amount}")
+    public ResponseEntity<?> getByBalanceThreshold(
+            @PathVariable BigDecimal amount,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "100") int size) {
+        
+        try {
+            logger.info("ENTMOD query by balance > {}", amount);
+            
+            EntModSodaService.PaginatedResult result = 
+                entModService.getByBalanceThreshold(amount, page, size);
+            
+            return ResponseEntity.ok(createSuccessResponse(result, 
+                Map.of("balanceThreshold", amount)));
+            
+        } catch (OracleException e) {
+            logger.error("Error querying ENTMOD by balance threshold", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(createErrorResponse("Balance threshold query error", e.getMessage()));
+        }
+    }
+
+    @GetMapping("/overdue")
+    public ResponseEntity<?> getOverdueRecords(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate asOfDate,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "100") int size) {
+        
+        if (asOfDate == null) {
+            asOfDate = LocalDate.now();
+        }
+        
+        try {
+            logger.info("ENTMOD overdue query as of: {}", asOfDate);
+            
+            EntModSodaService.PaginatedResult result = 
+                entModService.getOverdueRecords(asOfDate, page, size);
+            
+            return ResponseEntity.ok(createSuccessResponse(result, 
+                Map.of("asOfDate", asOfDate)));
+            
+        } catch (OracleException e) {
+            logger.error("Error querying overdue ENTMOD records", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(createErrorResponse("Overdue records query error", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/filter")
+    public ResponseEntity<?> getByCustomFilter(@RequestBody Map<String, Object> request) {
+        try {
+            String filter = (String) request.get("filter");
+            Integer page = (Integer) request.getOrDefault("page", 0);
+            Integer size = (Integer) request.getOrDefault("size", 100);
+            
+            if (filter == null || filter.trim().isEmpty()) {
+                return ResponseEntity.badRequest()
+                        .body(createErrorResponse("Invalid request", "Filter is required"));
+            }
+            
+            logger.info("ENTMOD custom filter query: {}", filter);
+            
+            EntModSodaService.PaginatedResult result = 
+                entModService.getDocumentsByFilter(filter, page, size);
+            
+            return ResponseEntity.ok(createSuccessResponse(result, 
+                Map.of("customFilter", filter)));
+            
+        } catch (OracleException e) {
+            logger.error("Error with custom filter query", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(createErrorResponse("Custom filter error", e.getMessage()));
+        }
+    }
+
+    @GetMapping("/count")
+    public ResponseEntity<?> getDocumentCount(@RequestParam(required = false) String filter) {
+        try {
+            logger.info("ENTMOD count query with filter: {}", filter);
+            
+            long count = entModService.getDocumentCount(filter);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("count", count);
+            response.put("filter", filter);
+            response.put("timestamp", System.currentTimeMillis());
+            
+            return ResponseEntity.ok(response);
+            
+        } catch (OracleException e) {
+            logger.error("Error getting document count", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(createErrorResponse("Count error", e.getMessage()));
+        }
+    }
+
+    private Map<String, Object> createSuccessResponse(EntModSodaService.PaginatedResult result, 
+                                                    Map<String, Object> additionalData) {
+        Map<String, Object> response = new HashMap<>();
+        response.put("data", result.getDocuments());
+        response.put("pagination", Map.of(
+            "page", result.getPage(),
+            "size", result.getPageSize(),
+            "totalCount", result.getTotalCount(),
+            "returned", result.getReturnedCount(),
+            "hasMore", result.hasMore()
+        ));
+        response.putAll(additionalData);
+        return response;
+    }
+
+    private Map<String, Object> createErrorResponse(String error, String message) {
+        Map<String, Object> errorResponse = new HashMap<>();
+        errorResponse.put("error", error);
+        errorResponse.put("message", message);
+        errorResponse.put("timestamp", System.currentTimeMillis());
+        return errorResponse;
+    }
+}
+
+// =============================================================================
+// FILE: src/main/resources/application.properties
+// =============================================================================
+# Server Configuration
+server.port=8080
+
+# Oracle Database Configuration
+spring.datasource.url=jdbc:oracle:thin:@localhost:1521:XE
+spring.datasource.username=your_username
+spring.datasource.password=your_password
+spring.datasource.driver-class-name=oracle.jdbc.OracleDriver
+
+# Connection Pool Settings
+spring.datasource.hikari.maximum-pool-size=20
+spring.datasource.hikari.minimum-idle=5
+spring.datasource.hikari.connection-timeout=30000
+spring.datasource.hikari.idle-timeout=600000
+spring.datasource.hikari.max-lifetime=1800000
+
+# Logging Configuration
+logging.level.com.example.sodademo=INFO
+logging.level.oracle.soda=WARN
+logging.pattern.console=%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n
