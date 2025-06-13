@@ -1,0 +1,42 @@
+private PaginatedResult getDocumentsOptimized(String filterSpec, int page, int pageSize) throws OracleException, IOException {
+    if (pageSize > MAX_BATCH_SIZE) {
+        throw new IllegalArgumentException("Page size cannot exceed " + MAX_BATCH_SIZE);
+    }
+
+    OracleCollection collection = getCollection();
+    int skip = page * pageSize;
+
+    List<String> documents = new ArrayList<>();
+
+    // Use getCursor() with proper resource management
+    OracleCursor cursor = null;
+    try {
+        cursor = collection.find()
+                .filter(filterSpec != null ? filterSpec : "{}")
+                .skip(skip)
+                .limit(pageSize)
+                .getCursor();
+        
+        while (cursor.hasNext()) {
+            OracleDocument doc = cursor.next();
+            documents.add(doc.getContentAsString());
+        }
+    } finally {
+        if (cursor != null) {
+            try {
+                cursor.close();
+            } catch (Exception e) {
+                logger.warn("Error closing cursor", e);
+            }
+        }
+    }
+
+    long totalCount = 0;
+    if (page == 0) {
+        totalCount = collection.find()
+                .filter(filterSpec != null ? filterSpec : "{}")
+                .count();
+    }
+
+    return new PaginatedResult(documents, totalCount, page, pageSize);
+}
