@@ -175,3 +175,12 @@ Best regards,
 [Your Name]  
 [Your Title]  
 [Your Contact Information]
+
+-- Check current Oracle version
+SELECT BANNER FROM V$VERSION WHERE BANNER LIKE 'Oracle Database%';
+
+-- Check current compatible setting
+SELECT NAME, VALUE FROM V$PARAMETER WHERE NAME = 'compatible';
+
+-- Check if SODA is available
+SELECT * FROM DBA_REGISTRY WHERE COMP_ID = 'JAVAVM';
