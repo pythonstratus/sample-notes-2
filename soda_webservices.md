@@ -58,15 +58,59 @@ SODA framework offers significant performance improvements:
 
 To enable SODA framework, please execute the following configuration steps:
 
-### 1. Enable SODA for the Database
-```sql
--- Connect as SYSDBA
-ALTER SYSTEM SET compatible='12.2.0.0.0' SCOPE=SPFILE;
--- Restart database if compatible parameter was changed
+### 1. Prerequisites Check and Database Configuration
 
--- Enable JSON datatype (if not already enabled)
+**IMPORTANT:** Oracle SODA requires Oracle Database 12c Release 2 (12.2.0.1) or later.
+
+#### Step 1a: Check Current Database Status
+```sql
+-- Connect as SYSDBA first
+CONNECT / AS SYSDBA;
+
+-- Check current Oracle version (must be 12.2 or higher for SODA)
+SELECT BANNER FROM V$VERSION WHERE BANNER LIKE 'Oracle Database%';
+
+-- Check current compatible setting
+SELECT NAME, VALUE FROM V$PARAMETER WHERE NAME = 'compatible';
+
+-- Check if Java VM is installed (required for SODA)
+SELECT COMP_NAME, VERSION, STATUS 
+FROM DBA_REGISTRY 
+WHERE COMP_ID = 'JAVAVM';
+```
+
+#### Step 1b: Enable SODA Database Configuration
+```sql
+-- Only run this if compatible is less than 12.2.0.0.0
+-- WARNING: This is irreversible and requires database restart
+ALTER SYSTEM SET compatible='12.2.0.0.0' SCOPE=SPFILE;
+
+-- Restart database after changing compatible parameter
+SHUTDOWN IMMEDIATE;
+STARTUP;
+
+-- For Container Database (CDB) environments only:
+-- If you're using pluggable databases, run these commands
 ALTER SESSION SET CONTAINER = CDB$ROOT;
 ALTER PLUGGABLE DATABASE ALL OPEN;
+
+-- Verify the compatible parameter was set correctly
+SELECT NAME, VALUE FROM V$PARAMETER WHERE NAME = 'compatible';
+```
+
+#### Step 1c: Verify SODA Prerequisites
+```sql
+-- Confirm Java VM status (should show VALID)
+SELECT COMP_NAME, VERSION, STATUS 
+FROM DBA_REGISTRY 
+WHERE COMP_ID = 'JAVAVM';
+
+-- Check if database is ready for SODA
+SELECT 'Database Version: ' || BANNER as INFO FROM V$VERSION WHERE BANNER LIKE 'Oracle Database%'
+UNION ALL
+SELECT 'Compatible Setting: ' || VALUE FROM V$PARAMETER WHERE NAME = 'compatible'
+UNION ALL
+SELECT 'Java VM Status: ' || STATUS FROM DBA_REGISTRY WHERE COMP_ID = 'JAVAVM';
 ```
 
 ### 2. Create SODA-Enabled User/Schema
@@ -175,12 +219,3 @@ Best regards,
 [Your Name]  
 [Your Title]  
 [Your Contact Information]
-
--- Check current Oracle version
-SELECT BANNER FROM V$VERSION WHERE BANNER LIKE 'Oracle Database%';
-
--- Check current compatible setting
-SELECT NAME, VALUE FROM V$PARAMETER WHERE NAME = 'compatible';
-
--- Check if SODA is available
-SELECT * FROM DBA_REGISTRY WHERE COMP_ID = 'JAVAVM';
