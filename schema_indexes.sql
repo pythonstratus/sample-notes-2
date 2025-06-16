@@ -253,3 +253,18 @@ BEGIN
     );
 END;
 /
+
+
+SET SERVEROUTPUT ON SIZE 1000000;
+
+-- Method 2: Using positional parameters
+EXEC sp_generate_index_report('ENTITYDEV', NULL, NULL, 'N', 'DETAILED');
+
+
+SET SERVEROUTPUT ON SIZE 1000000;
+
+-- Method 3: Using defaults (current user schema)
+BEGIN
+    sp_generate_index_report();
+END;
+/
