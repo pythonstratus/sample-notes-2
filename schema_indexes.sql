@@ -241,3 +241,15 @@ EXEC sp_generate_index_report(p_schema_name => 'YOUR_SCHEMA', p_output_format =>
 -- Get report for specific table
 EXEC sp_generate_index_report(p_table_name => 'YOUR_TABLE', p_output_format => 'DETAILED');
 */
+
+
+SET SERVEROUTPUT ON SIZE 1000000;
+
+-- Method 1: Using BEGIN/END block (recommended)
+BEGIN
+    sp_generate_index_report(
+        p_schema_name => 'ENTITYDEV',
+        p_output_format => 'DETAILED'
+    );
+END;
+/
