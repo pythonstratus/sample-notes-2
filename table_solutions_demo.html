@@ -1,0 +1,912 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Table Solutions Demo</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: #f8fafc;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 12px;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+
+        .demo-section {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            border: 1px solid #e2e8f0;
+        }
+
+        .demo-title {
+            font-size: 1.5em;
+            font-weight: 600;
+            margin-bottom: 15px;
+            color: #2d3748;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .demo-description {
+            color: #718096;
+            margin-bottom: 20px;
+            font-size: 0.95em;
+        }
+
+        /* Navigation */
+        .nav-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 25px;
+            border-bottom: 2px solid #e2e8f0;
+        }
+
+        .nav-tab {
+            padding: 12px 20px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-weight: 500;
+            border-radius: 8px 8px 0 0;
+            transition: all 0.3s ease;
+            color: #718096;
+        }
+
+        .nav-tab.active {
+            background: #667eea;
+            color: white;
+            transform: translateY(-2px);
+        }
+
+        .nav-tab:hover:not(.active) {
+            background: #f7fafc;
+            color: #4a5568;
+        }
+
+        /* Progressive Disclosure Styles */
+        .progressive-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .progressive-table th {
+            background: #f8fafc;
+            padding: 15px 12px;
+            text-align: left;
+            font-weight: 600;
+            color: #2d3748;
+            border-bottom: 2px solid #e2e8f0;
+        }
+
+        .progressive-table td {
+            padding: 12px;
+            border-bottom: 1px solid #e2e8f0;
+            vertical-align: top;
+        }
+
+        .expand-btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            cursor: pointer;
+            font-size: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+        }
+
+        .expand-btn:hover {
+            background: #5a67d8;
+            transform: scale(1.1);
+        }
+
+        .expand-btn.expanded {
+            background: #e53e3e;
+            transform: rotate(45deg);
+        }
+
+        .expanded-details {
+            background: #f7fafc;
+            padding: 20px;
+            margin-top: 10px;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+            display: none;
+        }
+
+        .expanded-details.show {
+            display: block;
+            animation: slideDown 0.3s ease;
+        }
+
+        @keyframes slideDown {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .detail-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+
+        .detail-item {
+            background: white;
+            padding: 12px;
+            border-radius: 6px;
+            border: 1px solid #e2e8f0;
+        }
+
+        .detail-label {
+            font-weight: 600;
+            color: #4a5568;
+            font-size: 0.85em;
+            margin-bottom: 4px;
+        }
+
+        .detail-value {
+            color: #2d3748;
+            font-size: 0.95em;
+        }
+
+        /* Sticky Columns Styles */
+        .sticky-container {
+            position: relative;
+            overflow: hidden;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .sticky-table-wrapper {
+            display: flex;
+            background: white;
+        }
+
+        .sticky-columns {
+            flex-shrink: 0;
+            border-right: 2px solid #e2e8f0;
+            background: #f8fafc;
+        }
+
+        .scrollable-columns {
+            flex-grow: 1;
+            overflow-x: auto;
+            max-width: calc(100vw - 400px);
+        }
+
+        .sticky-table, .scrollable-table {
+            border-collapse: collapse;
+            width: 100%;
+        }
+
+        .sticky-table th, .scrollable-table th {
+            background: #667eea;
+            color: white;
+            padding: 15px 12px;
+            text-align: left;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .sticky-table td, .scrollable-table td {
+            padding: 12px;
+            border-bottom: 1px solid #e2e8f0;
+            white-space: nowrap;
+        }
+
+        .sticky-table tr:nth-child(even), .scrollable-table tr:nth-child(even) {
+            background: #f8fafc;
+        }
+
+        /* Responsive Styles */
+        .responsive-controls {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .column-toggle {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            background: #f7fafc;
+            border-radius: 20px;
+            border: 1px solid #e2e8f0;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 0.9em;
+        }
+
+        .column-toggle:hover {
+            background: #edf2f7;
+        }
+
+        .column-toggle.active {
+            background: #667eea;
+            color: white;
+        }
+
+        .hidden-indicator {
+            background: #fed7d7;
+            color: #c53030;
+            padding: 8px 12px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: 500;
+        }
+
+        /* Card Layout Styles */
+        .cards-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 20px;
+        }
+
+        .data-card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            border: 1px solid #e2e8f0;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .data-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 15px rgba(0,0,0,0.15);
+        }
+
+        .data-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: between;
+            align-items: flex-start;
+            margin-bottom: 15px;
+        }
+
+        .card-title {
+            font-size: 1.2em;
+            font-weight: 700;
+            color: #2d3748;
+            margin-bottom: 5px;
+        }
+
+        .card-subtitle {
+            color: #718096;
+            font-size: 0.9em;
+        }
+
+        .card-status {
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 0.75em;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .status-active { background: #c6f6d5; color: #22543d; }
+        .status-pending { background: #fef5e7; color: #c05621; }
+        .status-inactive { background: #fed7d7; color: #c53030; }
+
+        .card-body {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+
+        .card-field {
+            background: #f7fafc;
+            padding: 10px;
+            border-radius: 6px;
+        }
+
+        .card-field-label {
+            font-size: 0.8em;
+            color: #718096;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .card-field-value {
+            color: #2d3748;
+            font-weight: 500;
+        }
+
+        .card-actions {
+            display: flex;
+            gap: 10px;
+            padding-top: 15px;
+            border-top: 1px solid #e2e8f0;
+        }
+
+        .card-btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.85em;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+
+        .card-btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .card-btn-primary:hover {
+            background: #5a67d8;
+        }
+
+        .card-btn-secondary {
+            background: #edf2f7;
+            color: #4a5568;
+        }
+
+        .card-btn-secondary:hover {
+            background: #e2e8f0;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .container {
+                padding: 10px;
+            }
+            
+            .cards-container {
+                grid-template-columns: 1fr;
+            }
+            
+            .card-body {
+                grid-template-columns: 1fr;
+            }
+            
+            .scrollable-columns {
+                max-width: calc(100vw - 200px);
+            }
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Advanced Table Solutions Demo</h1>
+            <p>Explore four innovative approaches to handling wide data tables</p>
+        </div>
+
+        <div class="nav-tabs">
+            <button class="nav-tab active" onclick="showTab('progressive')">Progressive Disclosure</button>
+            <button class="nav-tab" onclick="showTab('sticky')">Sticky Columns</button>
+            <button class="nav-tab" onclick="showTab('responsive')">Responsive Adaptation</button>
+            <button class="nav-tab" onclick="showTab('cards')">Card Layout</button>
+        </div>
+
+        <!-- Progressive Disclosure -->
+        <div id="progressive" class="tab-content active">
+            <div class="demo-section">
+                <div class="demo-title">
+                    📊 Progressive Disclosure with Expandable Rows
+                </div>
+                <div class="demo-description">
+                    Click the + button to reveal additional details for each employee. Core information stays visible while extended data is accessible on-demand.
+                </div>
+                
+                <table class="progressive-table">
+                    <thead>
+                        <tr>
+                            <th></th>
+                            <th>Name</th>
+                            <th>Department</th>
+                            <th>Status</th>
+                            <th>Salary</th>
+                        </tr>
+                    </thead>
+                    <tbody id="progressiveTableBody">
+                        <!-- Populated by JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Sticky Columns -->
+        <div id="sticky" class="tab-content">
+            <div class="demo-section">
+                <div class="demo-title">
+                    📌 Column Virtualization with Sticky Priorities
+                </div>
+                <div class="demo-description">
+                    Essential columns (Name, ID) remain fixed while additional data scrolls horizontally. Try scrolling the right section.
+                </div>
+                
+                <div class="sticky-container">
+                    <div class="sticky-table-wrapper">
+                        <div class="sticky-columns">
+                            <table class="sticky-table">
+                                <thead>
+                                    <tr>
+                                        <th>Employee ID</th>
+                                        <th>Full Name</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="stickyTableBody">
+                                    <!-- Populated by JavaScript -->
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="scrollable-columns">
+                            <table class="scrollable-table">
+                                <thead>
+                                    <tr>
+                                        <th>Department</th>
+                                        <th>Position</th>
+                                        <th>Start Date</th>
+                                        <th>Salary</th>
+                                        <th>Manager</th>
+                                        <th>Location</th>
+                                        <th>Phone</th>
+                                        <th>Email</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="scrollableTableBody">
+                                    <!-- Populated by JavaScript -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Responsive Adaptation -->
+        <div id="responsive" class="tab-content">
+            <div class="demo-section">
+                <div class="demo-title">
+                    📱 Responsive Column Adaptation
+                </div>
+                <div class="demo-description">
+                    Toggle columns based on priority and screen size. Hidden columns are indicated with a counter.
+                </div>
+                
+                <div class="responsive-controls">
+                    <div class="column-toggle active" data-column="name">Name</div>
+                    <div class="column-toggle active" data-column="dept">Department</div>
+                    <div class="column-toggle active" data-column="position">Position</div>
+                    <div class="column-toggle" data-column="salary">Salary</div>
+                    <div class="column-toggle" data-column="start">Start Date</div>
+                    <div class="column-toggle" data-column="manager">Manager</div>
+                    <div class="column-toggle" data-column="location">Location</div>
+                    <div class="column-toggle" data-column="phone">Phone</div>
+                    <div class="hidden-indicator" id="hiddenIndicator">5 columns hidden</div>
+                </div>
+                
+                <table class="progressive-table" id="responsiveTable">
+                    <thead>
+                        <tr id="responsiveHeader">
+                            <th data-column="name">Name</th>
+                            <th data-column="dept">Department</th>
+                            <th data-column="position">Position</th>
+                            <th data-column="salary" style="display: none;">Salary</th>
+                            <th data-column="start" style="display: none;">Start Date</th>
+                            <th data-column="manager" style="display: none;">Manager</th>
+                            <th data-column="location" style="display: none;">Location</th>
+                            <th data-column="phone" style="display: none;">Phone</th>
+                        </tr>
+                    </thead>
+                    <tbody id="responsiveTableBody">
+                        <!-- Populated by JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Card Layout -->
+        <div id="cards" class="tab-content">
+            <div class="demo-section">
+                <div class="demo-title">
+                    🎴 Card-Based Layout
+                </div>
+                <div class="demo-description">
+                    Transform tabular data into scannable cards with hierarchical information display and contextual actions.
+                </div>
+                
+                <div class="cards-container" id="cardsContainer">
+                    <!-- Populated by JavaScript -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Sample data
+        const employees = [
+            {
+                id: 'EMP001',
+                name: 'Sarah Johnson',
+                department: 'Engineering',
+                position: 'Senior Developer',
+                status: 'Active',
+                salary: '$95,000',
+                startDate: '2021-03-15',
+                manager: 'Mike Chen',
+                location: 'San Francisco',
+                phone: '(555) 123-4567',
+                email: 'sarah.johnson@company.com',
+                projects: 'React Dashboard, API Gateway',
+                skills: 'React, Node.js, Python',
+                lastReview: '2024-01-15',
+                nextReview: '2024-07-15'
+            },
+            {
+                id: 'EMP002',
+                name: 'David Rodriguez',
+                department: 'Marketing',
+                position: 'Marketing Manager',
+                status: 'Active',
+                salary: '$78,000',
+                startDate: '2020-08-22',
+                manager: 'Lisa Park',
+                location: 'New York',
+                phone: '(555) 234-5678',
+                email: 'david.rodriguez@company.com',
+                projects: 'Brand Campaign, Social Media',
+                skills: 'Digital Marketing, Analytics',
+                lastReview: '2023-12-10',
+                nextReview: '2024-06-10'
+            },
+            {
+                id: 'EMP003',
+                name: 'Emily Watson',
+                department: 'Design',
+                position: 'UX Designer',
+                status: 'Pending',
+                salary: '$72,000',
+                startDate: '2022-01-10',
+                manager: 'Alex Kim',
+                location: 'Austin',
+                phone: '(555) 345-6789',
+                email: 'emily.watson@company.com',
+                projects: 'Mobile App Redesign',
+                skills: 'Figma, User Research, Prototyping',
+                lastReview: '2024-02-01',
+                nextReview: '2024-08-01'
+            },
+            {
+                id: 'EMP004',
+                name: 'Michael Brown',
+                department: 'Sales',
+                position: 'Sales Representative',
+                status: 'Active',
+                salary: '$65,000',
+                startDate: '2019-11-05',
+                manager: 'Jennifer Lee',
+                location: 'Chicago',
+                phone: '(555) 456-7890',
+                email: 'michael.brown@company.com',
+                projects: 'Enterprise Sales, Client Relations',
+                skills: 'CRM, Negotiation, Presentations',
+                lastReview: '2023-11-20',
+                nextReview: '2024-05-20'
+            },
+            {
+                id: 'EMP005',
+                name: 'Anna Martinez',
+                department: 'Engineering',
+                position: 'DevOps Engineer',
+                status: 'Inactive',
+                salary: '$88,000',
+                startDate: '2021-07-12',
+                manager: 'Mike Chen',
+                location: 'Seattle',
+                phone: '(555) 567-8901',
+                email: 'anna.martinez@company.com',
+                projects: 'Infrastructure Automation',
+                skills: 'AWS, Docker, Kubernetes',
+                lastReview: '2024-01-05',
+                nextReview: '2024-07-05'
+            }
+        ];
+
+        // Tab Navigation
+        function showTab(tabId) {
+            // Hide all tabs
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            document.querySelectorAll('.nav-tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Show selected tab
+            document.getElementById(tabId).classList.add('active');
+            event.target.classList.add('active');
+        }
+
+        // Progressive Disclosure Implementation
+        function initProgressiveDisclosure() {
+            const tbody = document.getElementById('progressiveTableBody');
+            tbody.innerHTML = '';
+            
+            employees.forEach((emp, index) => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>
+                        <button class="expand-btn" onclick="toggleExpanded(${index})">+</button>
+                    </td>
+                    <td>${emp.name}</td>
+                    <td>${emp.department}</td>
+                    <td><span class="status-${emp.status.toLowerCase()}">${emp.status}</span></td>
+                    <td>${emp.salary}</td>
+                `;
+                tbody.appendChild(row);
+                
+                // Add expanded details row
+                const detailRow = document.createElement('tr');
+                detailRow.innerHTML = `
+                    <td colspan="5">
+                        <div class="expanded-details" id="details-${index}">
+                            <div class="detail-grid">
+                                <div class="detail-item">
+                                    <div class="detail-label">Employee ID</div>
+                                    <div class="detail-value">${emp.id}</div>
+                                </div>
+                                <div class="detail-item">
+                                    <div class="detail-label">Position</div>
+                                    <div class="detail-value">${emp.position}</div>
+                                </div>
+                                <div class="detail-item">
+                                    <div class="detail-label">Start Date</div>
+                                    <div class="detail-value">${emp.startDate}</div>
+                                </div>
+                                <div class="detail-item">
+                                    <div class="detail-label">Manager</div>
+                                    <div class="detail-value">${emp.manager}</div>
+                                </div>
+                                <div class="detail-item">
+                                    <div class="detail-label">Location</div>
+                                    <div class="detail-value">${emp.location}</div>
+                                </div>
+                                <div class="detail-item">
+                                    <div class="detail-label">Email</div>
+                                    <div class="detail-value">${emp.email}</div>
+                                </div>
+                                <div class="detail-item">
+                                    <div class="detail-label">Current Projects</div>
+                                    <div class="detail-value">${emp.projects}</div>
+                                </div>
+                                <div class="detail-item">
+                                    <div class="detail-label">Key Skills</div>
+                                    <div class="detail-value">${emp.skills}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </td>
+                `;
+                tbody.appendChild(detailRow);
+            });
+        }
+
+        function toggleExpanded(index) {
+            const details = document.getElementById(`details-${index}`);
+            const btn = event.target;
+            
+            if (details.classList.contains('show')) {
+                details.classList.remove('show');
+                btn.textContent = '+';
+                btn.classList.remove('expanded');
+            } else {
+                details.classList.add('show');
+                btn.textContent = '×';
+                btn.classList.add('expanded');
+            }
+        }
+
+        // Sticky Columns Implementation
+        function initStickyColumns() {
+            const stickyBody = document.getElementById('stickyTableBody');
+            const scrollableBody = document.getElementById('scrollableTableBody');
+            
+            stickyBody.innerHTML = '';
+            scrollableBody.innerHTML = '';
+            
+            employees.forEach(emp => {
+                // Sticky columns
+                const stickyRow = document.createElement('tr');
+                stickyRow.innerHTML = `
+                    <td>${emp.id}</td>
+                    <td>${emp.name}</td>
+                `;
+                stickyBody.appendChild(stickyRow);
+                
+                // Scrollable columns
+                const scrollableRow = document.createElement('tr');
+                scrollableRow.innerHTML = `
+                    <td>${emp.department}</td>
+                    <td>${emp.position}</td>
+                    <td>${emp.startDate}</td>
+                    <td>${emp.salary}</td>
+                    <td>${emp.manager}</td>
+                    <td>${emp.location}</td>
+                    <td>${emp.phone}</td>
+                    <td>${emp.email}</td>
+                    <td><span class="card-status status-${emp.status.toLowerCase()}">${emp.status}</span></td>
+                `;
+                scrollableBody.appendChild(scrollableRow);
+            });
+        }
+
+        // Responsive Adaptation Implementation
+        function initResponsiveColumns() {
+            const tbody = document.getElementById('responsiveTableBody');
+            tbody.innerHTML = '';
+            
+            employees.forEach(emp => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td data-column="name">${emp.name}</td>
+                    <td data-column="dept">${emp.department}</td>
+                    <td data-column="position">${emp.position}</td>
+                    <td data-column="salary" style="display: none;">${emp.salary}</td>
+                    <td data-column="start" style="display: none;">${emp.startDate}</td>
+                    <td data-column="manager" style="display: none;">${emp.manager}</td>
+                    <td data-column="location" style="display: none;">${emp.location}</td>
+                    <td data-column="phone" style="display: none;">${emp.phone}</td>
+                `;
+                tbody.appendChild(row);
+            });
+            
+            // Add click handlers for column toggles
+            document.querySelectorAll('.column-toggle').forEach(toggle => {
+                toggle.addEventListener('click', function() {
+                    const column = this.dataset.column;
+                    const isActive = this.classList.contains('active');
+                    
+                    // Toggle column visibility
+                    const headers = document.querySelectorAll(`th[data-column="${column}"]`);
+                    const cells = document.querySelectorAll(`td[data-column="${column}"]`);
+                    
+                    if (isActive) {
+                        headers.forEach(h => h.style.display = 'none');
+                        cells.forEach(c => c.style.display = 'none');
+                        this.classList.remove('active');
+                    } else {
+                        headers.forEach(h => h.style.display = '');
+                        cells.forEach(c => c.style.display = '');
+                        this.classList.add('active');
+                    }
+                    
+                    updateHiddenIndicator();
+                });
+            });
+            
+            updateHiddenIndicator();
+        }
+
+        function updateHiddenIndicator() {
+            const hiddenCount = document.querySelectorAll('.column-toggle:not(.active)').length;
+            const indicator = document.getElementById('hiddenIndicator');
+            indicator.textContent = `${hiddenCount} columns hidden`;
+            indicator.style.display = hiddenCount > 0 ? 'block' : 'none';
+        }
+
+        // Card Layout Implementation
+        function initCardLayout() {
+            const container = document.getElementById('cardsContainer');
+            container.innerHTML = '';
+            
+            employees.forEach(emp => {
+                const card = document.createElement('div');
+                card.className = 'data-card';
+                
+                card.innerHTML = `
+                    <div class="card-header">
+                        <div>
+                            <div class="card-title">${emp.name}</div>
+                            <div class="card-subtitle">${emp.id} • ${emp.position}</div>
+                        </div>
+                        <div class="card-status status-${emp.status.toLowerCase()}">${emp.status}</div>
+                    </div>
+                    
+                    <div class="card-body">
+                        <div class="card-field">
+                            <div class="card-field-label">Department</div>
+                            <div class="card-field-value">${emp.department}</div>
+                        </div>
+                        <div class="card-field">
+                            <div class="card-field-label">Salary</div>
+                            <div class="card-field-value">${emp.salary}</div>
+                        </div>
+                        <div class="card-field">
+                            <div class="card-field-label">Start Date</div>
+                            <div class="card-field-value">${emp.startDate}</div>
+                        </div>
+                        <div class="card-field">
+                            <div class="card-field-label">Location</div>
+                            <div class="card-field-value">${emp.location}</div>
+                        </div>
+                        <div class="card-field">
+                            <div class="card-field-label">Manager</div>
+                            <div class="card-field-value">${emp.manager}</div>
+                        </div>
+                        <div class="card-field">
+                            <div class="card-field-label">Skills</div>
+                            <div class="card-field-value">${emp.skills}</div>
+                        </div>
+                    </div>
+                    
+                    <div class="card-actions">
+                        <button class="card-btn card-btn-primary">View Details</button>
+                        <button class="card-btn card-btn-secondary">Edit</button>
+                    </div>
+                `;
+                
+                container.appendChild(card);
+            });
+        }
+
+        // Initialize all demos
+        document.addEventListener('DOMContentLoaded', function() {
+            initProgressiveDisclosure();
+            initStickyColumns();
+            initResponsiveColumns();
+            initCardLayout();
+        });
+    </script>
+</body>
+</html>
