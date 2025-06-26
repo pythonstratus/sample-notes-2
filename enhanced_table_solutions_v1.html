@@ -1,0 +1,2872 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enhanced Table Solutions - Large Dataset Demo</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: #f8fafc;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 12px;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+
+        .demo-section {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            border: 1px solid #e2e8f0;
+        }
+
+        .demo-title {
+            font-size: 1.5em;
+            font-weight: 600;
+            margin-bottom: 15px;
+            color: #2d3748;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .demo-description {
+            color: #718096;
+            margin-bottom: 20px;
+            font-size: 0.95em;
+        }
+
+        /* Navigation */
+        .nav-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 25px;
+            border-bottom: 2px solid #e2e8f0;
+            overflow-x: auto;
+        }
+
+        .nav-tab {
+            padding: 12px 20px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-weight: 500;
+            border-radius: 8px 8px 0 0;
+            transition: all 0.3s ease;
+            color: #718096;
+            white-space: nowrap;
+        }
+
+        .nav-tab.active {
+            background: #667eea;
+            color: white;
+            transform: translateY(-2px);
+        }
+
+        .nav-tab:hover:not(.active) {
+            background: #f7fafc;
+            color: #4a5568;
+        }
+
+        /* Controls */
+        .controls {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .search-box, .filter-select {
+            padding: 10px;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            font-size: 0.9em;
+            min-width: 200px;
+        }
+
+        .search-box:focus, .filter-select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .stats-bar {
+            background: #f7fafc;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+
+        .stat-item {
+            background: white;
+            padding: 10px 15px;
+            border-radius: 6px;
+            border: 1px solid #e2e8f0;
+            text-align: center;
+            min-width: 120px;
+        }
+
+        .stat-value {
+            font-size: 1.2em;
+            font-weight: 700;
+            color: #667eea;
+        }
+
+        .stat-label {
+            font-size: 0.8em;
+            color: #718096;
+            margin-top: 2px;
+        }
+
+        /* Progressive Disclosure Styles */
+        .progressive-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .progressive-table th {
+            background: #f8fafc;
+            padding: 15px 12px;
+            text-align: left;
+            font-weight: 600;
+            color: #2d3748;
+            border-bottom: 2px solid #e2e8f0;
+        }
+
+        .progressive-table td {
+            padding: 12px;
+            border-bottom: 1px solid #e2e8f0;
+            vertical-align: top;
+        }
+
+        .expand-btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            cursor: pointer;
+            font-size: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+        }
+
+        .expand-btn:hover {
+            background: #5a67d8;
+            transform: scale(1.1);
+        }
+
+        .expand-btn.expanded {
+            background: #e53e3e;
+            transform: rotate(45deg);
+        }
+
+        .expanded-details {
+            background: #f7fafc;
+            padding: 20px;
+            margin-top: 10px;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+            display: none;
+        }
+
+        .expanded-details.show {
+            display: block;
+            animation: slideDown 0.3s ease;
+        }
+
+        @keyframes slideDown {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .detail-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+
+        .detail-item {
+            background: white;
+            padding: 12px;
+            border-radius: 6px;
+            border: 1px solid #e2e8f0;
+        }
+
+        .detail-label {
+            font-weight: 600;
+            color: #4a5568;
+            font-size: 0.85em;
+            margin-bottom: 4px;
+        }
+
+        .detail-value {
+            color: #2d3748;
+            font-size: 0.95em;
+        }
+
+        /* Sticky Columns Styles */
+        .sticky-container {
+            position: relative;
+            overflow: hidden;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            background: white;
+        }
+
+        .sticky-table-wrapper {
+            display: flex;
+            background: white;
+            height: 500px;
+        }
+
+        .sticky-columns {
+            flex-shrink: 0;
+            border-right: 2px solid #e2e8f0;
+            background: #f8fafc;
+            width: 300px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .sticky-columns-header {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            background: #667eea;
+            border-bottom: 2px solid #5a67d8;
+        }
+
+        .sticky-columns-body {
+            height: calc(100% - 60px);
+            overflow-y: auto;
+            overflow-x: hidden;
+        }
+
+        .scrollable-columns {
+            flex-grow: 1;
+            overflow: auto;
+            position: relative;
+        }
+
+        .scrollable-columns-header {
+            position: sticky;
+            top: 0;
+            z-index: 9;
+            background: #667eea;
+            border-bottom: 2px solid #5a67d8;
+        }
+
+        .scrollable-columns-body {
+            height: calc(100% - 60px);
+            overflow-y: auto;
+            overflow-x: auto;
+            min-width: max-content;
+        }
+
+        .sticky-table, .scrollable-table {
+            border-collapse: collapse;
+            width: 100%;
+            min-width: max-content;
+        }
+
+        .sticky-table th, .scrollable-table th {
+            background: #667eea;
+            color: white;
+            padding: 15px 12px;
+            text-align: left;
+            font-weight: 600;
+            white-space: nowrap;
+            position: sticky;
+            top: 0;
+            height: 60px;
+            box-sizing: border-box;
+        }
+
+        .sticky-table td, .scrollable-table td {
+            padding: 12px;
+            border-bottom: 1px solid #e2e8f0;
+            white-space: nowrap;
+            min-width: 120px;
+            box-sizing: border-box;
+        }
+
+        .sticky-table tr:nth-child(even), .scrollable-table tr:nth-child(even) {
+            background: #f8fafc;
+        }
+
+        /* Column width specifications for better layout */
+        .col-assignment { min-width: 140px; }
+        .col-seid { min-width: 100px; }
+        .col-employee-name { min-width: 180px; }
+        .col-employee-type { min-width: 80px; }
+        .col-grade { min-width: 80px; }
+        .col-zip-count { min-width: 100px; }
+        .col-priority-count { min-width: 120px; }
+        .col-high-priority { min-width: 130px; }
+        .col-cases-hold { min-width: 110px; }
+        .col-open-cases { min-width: 110px; }
+        .col-pending-cases { min-width: 120px; }
+        .col-target-85 { min-width: 100px; }
+        .col-target-top { min-width: 100px; }
+        .col-target-bottom { min-width: 110px; }
+        .col-adjustment-pct { min-width: 120px; }
+        .col-adjustment-reason { min-width: 140px; }
+        .col-adjustment-date { min-width: 130px; }
+        .col-warning { min-width: 100px; }
+        .col-total-assigned { min-width: 130px; }
+        .col-grade-9 { min-width: 100px; }
+        .col-grade-11 { min-width: 100px; }
+        .col-grade-12 { min-width: 100px; }
+        .col-grade-13 { min-width: 100px; }
+
+        /* Scroll synchronization indicators */
+        .scroll-sync-indicator {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(102, 126, 234, 0.1);
+            padding: 5px 10px;
+            border-radius: 20px;
+            font-size: 0.8em;
+            color: #667eea;
+            font-weight: 500;
+        }
+
+        /* Responsive Styles */
+        .responsive-controls {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .column-toggle {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            background: #f7fafc;
+            border-radius: 20px;
+            border: 1px solid #e2e8f0;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 0.9em;
+        }
+
+        .column-toggle:hover {
+            background: #edf2f7;
+        }
+
+        .column-toggle.active {
+            background: #667eea;
+            color: white;
+        }
+
+        .hidden-indicator {
+            background: #fed7d7;
+            color: #c53030;
+            padding: 8px 12px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: 500;
+        }
+
+        /* Card Layout Styles */
+        .cards-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 20px;
+            max-height: 600px;
+            overflow-y: auto;
+        }
+
+        .data-card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            border: 1px solid #e2e8f0;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .data-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 15px rgba(0,0,0,0.15);
+        }
+
+        .data-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 15px;
+        }
+
+        .card-title {
+            font-size: 1.2em;
+            font-weight: 700;
+            color: #2d3748;
+            margin-bottom: 5px;
+        }
+
+        .card-subtitle {
+            color: #718096;
+            font-size: 0.9em;
+        }
+
+        .card-status {
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 0.75em;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .status-high { background: #fed7d7; color: #c53030; }
+        .status-medium { background: #fef5e7; color: #c05621; }
+        .status-low { background: #c6f6d5; color: #22543d; }
+        .status-normal { background: #e6fffa; color: #285e61; }
+
+        .card-body {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+
+        .card-field {
+            background: #f7fafc;
+            padding: 10px;
+            border-radius: 6px;
+        }
+
+        .card-field-label {
+            font-size: 0.8em;
+            color: #718096;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .card-field-value {
+            color: #2d3748;
+            font-weight: 500;
+        }
+
+        .card-actions {
+            display: flex;
+            gap: 10px;
+            padding-top: 15px;
+            border-top: 1px solid #e2e8f0;
+        }
+
+        .card-btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.85em;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+
+        .card-btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .card-btn-primary:hover {
+            background: #5a67d8;
+        }
+
+        .card-btn-secondary {
+            background: #edf2f7;
+            color: #4a5568;
+        }
+
+        .card-btn-secondary:hover {
+            background: #e2e8f0;
+        }
+
+        /* Enhanced Graph Styles */
+        .chart-container {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .chart-title {
+            font-size: 1.2em;
+            font-weight: 600;
+            margin-bottom: 15px;
+            color: #2d3748;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .chart-subtitle {
+            font-size: 0.9em;
+            color: #718096;
+            margin-bottom: 15px;
+        }
+
+        .chart-canvas {
+            width: 100%;
+            height: 300px;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            background: #fafafa;
+        }
+
+        .chart-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 20px;
+        }
+
+        .chart-full-width {
+            grid-column: 1 / -1;
+        }
+
+        .chart-controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+
+        .chart-btn {
+            padding: 6px 12px;
+            background: #f7fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.85em;
+            transition: all 0.3s ease;
+        }
+
+        .chart-btn.active {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+
+        .chart-btn:hover:not(.active) {
+            background: #edf2f7;
+        }
+
+        /* Bubble Chart Styles */
+        .bubble {
+            fill: rgba(102, 126, 234, 0.7);
+            stroke: #667eea;
+            stroke-width: 2;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .bubble:hover {
+            fill: rgba(102, 126, 234, 0.9);
+            stroke-width: 3;
+        }
+
+        /* Heatmap Styles */
+        .heatmap-cell {
+            stroke: white;
+            stroke-width: 2;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .heatmap-cell:hover {
+            stroke: #667eea;
+            stroke-width: 3;
+        }
+
+        /* Network Graph Styles */
+        .network-node {
+            stroke: white;
+            stroke-width: 2;
+            cursor: pointer;
+        }
+
+        .network-link {
+            stroke: #cbd5e0;
+            stroke-width: 1;
+            opacity: 0.6;
+        }
+
+        /* Gauge Chart Styles */
+        .gauge-background {
+            fill: #f7fafc;
+            stroke: #e2e8f0;
+            stroke-width: 2;
+        }
+
+        .gauge-fill {
+            fill: none;
+            stroke-width: 8;
+            stroke-linecap: round;
+            transition: stroke-dasharray 0.5s ease;
+        }
+
+        .gauge-text {
+            text-anchor: middle;
+            font-size: 24px;
+            font-weight: bold;
+            fill: #2d3748;
+        }
+
+        /* Treemap Styles */
+        .treemap-rect {
+            stroke: white;
+            stroke-width: 2;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .treemap-rect:hover {
+            stroke: #667eea;
+            stroke-width: 3;
+        }
+
+        .treemap-text {
+            font-size: 12px;
+            fill: white;
+            text-anchor: middle;
+            font-weight: 600;
+            pointer-events: none;
+        }
+
+        /* Scatter Plot Styles */
+        .scatter-point {
+            stroke: white;
+            stroke-width: 1;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .scatter-point:hover {
+            stroke-width: 3;
+            r: 8;
+        }
+
+        /* Chart Legend */
+        .chart-legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-top: 15px;
+            font-size: 0.85em;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .legend-color {
+            width: 12px;
+            height: 12px;
+            border-radius: 2px;
+        }
+
+        /* Tooltip Styles */
+        .chart-tooltip {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 10px;
+            border-radius: 6px;
+            font-size: 0.85em;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            z-index: 1000;
+            max-width: 250px;
+        }
+
+        .chart-tooltip.show {
+            opacity: 1;
+        }
+
+        /* Performance Indicator Styles */
+        .performance-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+
+        .indicator-excellent { background: #48bb78; }
+        .indicator-good { background: #38b2ac; }
+        .indicator-average { background: #ed8936; }
+        .indicator-poor { background: #e53e3e; }
+
+        /* Chart Animation */
+        @keyframes chartFadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .chart-animated {
+            animation: chartFadeIn 0.6s ease-out;
+        }
+
+        /* Pagination */
+        .pagination {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .pagination button {
+            padding: 8px 12px;
+            border: 1px solid #e2e8f0;
+            background: white;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .pagination button:hover:not(:disabled) {
+            background: #667eea;
+            color: white;
+        }
+
+        .pagination button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .pagination .current-page {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .container {
+                padding: 10px;
+            }
+            
+            .cards-container {
+                grid-template-columns: 1fr;
+            }
+            
+            .card-body {
+                grid-template-columns: 1fr;
+            }
+            
+            .scrollable-columns {
+                max-width: calc(100vw - 200px);
+            }
+            
+            .controls {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            
+            .search-box, .filter-select {
+                min-width: unset;
+            }
+            
+            .chart-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #718096;
+        }
+
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Virtual scrolling for large datasets */
+        .table-container {
+            max-height: 500px;
+            overflow-y: auto;
+        }
+
+        .sticky-table-container {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Enhanced Table Solutions - Large Dataset Demo</h1>
+            <p>Efficiently handling 1600+ employee assignment records with four innovative approaches plus advanced visualization</p>
+        </div>
+
+        <div class="nav-tabs">
+            <button class="nav-tab active" onclick="showTab('progressive')">Progressive Disclosure</button>
+            <button class="nav-tab" onclick="showTab('sticky')">Sticky Columns</button>
+            <button class="nav-tab" onclick="showTab('responsive')">Responsive Adaptation</button>
+            <button class="nav-tab" onclick="showTab('cards')">Card Layout</button>
+            <button class="nav-tab" onclick="showTab('graphs')">Advanced Graphs</button>
+        </div>
+
+        <!-- Progressive Disclosure -->
+        <div id="progressive" class="tab-content active">
+            <div class="demo-section">
+                <div class="demo-title">
+                    📊 Progressive Disclosure with Expandable Rows
+                </div>
+                <div class="demo-description">
+                    Click the + button to reveal additional details for each employee assignment. Core information stays visible while extended data is accessible on-demand. Handling 1600+ records with virtual scrolling.
+                </div>
+                
+                <div class="controls">
+                    <input type="text" class="search-box" id="progressiveSearch" placeholder="Search assignments, employees, or IDs...">
+                    <select class="filter-select" id="progressiveTypeFilter">
+                        <option value="">All Employee Types</option>
+                        <option value="R">Regular (R)</option>
+                        <option value="C">Contract (C)</option>
+                        <option value="T">Temporary (T)</option>
+                    </select>
+                </div>
+
+                <div class="stats-bar">
+                    <div class="stat-item">
+                        <div class="stat-value" id="progressiveTotalRecords">0</div>
+                        <div class="stat-label">Total Records</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="progressiveFilteredRecords">0</div>
+                        <div class="stat-label">Filtered</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="progressiveAvgCases">0</div>
+                        <div class="stat-label">Avg Cases</div>
+                    </div>
+                </div>
+                
+                <div class="table-container">
+                    <table class="progressive-table">
+                        <thead>
+                            <tr>
+                                <th></th>
+                                <th>Assignment #</th>
+                                <th>Employee Name</th>
+                                <th>Type</th>
+                                <th>Grade</th>
+                                <th>Open Cases</th>
+                            </tr>
+                        </thead>
+                        <tbody id="progressiveTableBody">
+                            <tr><td colspan="6" class="loading">
+                                <div class="spinner"></div>
+                                Generating sample data...
+                            </td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="pagination" id="progressivePagination"></div>
+            </div>
+        </div>
+
+        <!-- Sticky Columns -->
+        <div id="sticky" class="tab-content">
+            <div class="demo-section">
+                <div class="demo-title">
+                    📌 Column Virtualization with Sticky Priorities
+                </div>
+                <div class="demo-description">
+                    Essential columns (Assignment #, Employee Name) remain fixed while additional data scrolls horizontally. Vertical scrolling is perfectly synchronized between sections. All JSON data columns are displayed with horizontal scrolling support.
+                </div>
+                
+                <div class="controls">
+                    <input type="text" class="search-box" id="stickySearch" placeholder="Search assignments...">
+                    <select class="filter-select" id="stickyGradeFilter">
+                        <option value="">All Grades</option>
+                        <option value="5">Grade 5</option>
+                        <option value="7">Grade 7</option>
+                        <option value="9">Grade 9</option>
+                        <option value="11">Grade 11</option>
+                        <option value="12">Grade 12</option>
+                        <option value="13">Grade 13</option>
+                    </select>
+                    <select class="filter-select" id="stickyEmployeeTypeFilter">
+                        <option value="">All Employee Types</option>
+                        <option value="R">Regular (R)</option>
+                        <option value="C">Contract (C)</option>
+                        <option value="T">Temporary (T)</option>
+                    </select>
+                </div>
+
+                <div class="stats-bar">
+                    <div class="stat-item">
+                        <div class="stat-value" id="stickyTotalRecords">0</div>
+                        <div class="stat-label">Total Records</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="stickyHighPriority">0</div>
+                        <div class="stat-label">High Priority</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="stickyTotalColumns">0</div>
+                        <div class="stat-label">Total Columns</div>
+                    </div>
+                </div>
+                
+                <div class="sticky-container">
+                    <div class="scroll-sync-indicator" id="scrollSyncIndicator">Scroll Sync: Active</div>
+                    <div class="sticky-table-wrapper">
+                        <div class="sticky-columns">
+                            <div class="sticky-columns-header">
+                                <table class="sticky-table">
+                                    <thead>
+                                        <tr>
+                                            <th class="col-assignment">Assignment #</th>
+                                            <th class="col-employee-name">Employee Name</th>
+                                        </tr>
+                                    </thead>
+                                </table>
+                            </div>
+                            <div class="sticky-columns-body" id="stickyColumnsBody">
+                                <table class="sticky-table">
+                                    <tbody id="stickyTableBody">
+                                        <!-- Populated by JavaScript -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="scrollable-columns">
+                            <div class="scrollable-columns-header">
+                                <table class="scrollable-table">
+                                    <thead>
+                                        <tr id="scrollableTableHeader">
+                                            <!-- Headers populated by JavaScript based on JSON structure -->
+                                        </tr>
+                                    </thead>
+                                </table>
+                            </div>
+                            <div class="scrollable-columns-body" id="scrollableColumnsBody">
+                                <table class="scrollable-table">
+                                    <tbody id="scrollableTableBody">
+                                        <!-- Populated by JavaScript -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="pagination" id="stickyPagination"></div>
+            </div>
+        </div>
+
+        <!-- Responsive Adaptation -->
+        <div id="responsive" class="tab-content">
+            <div class="demo-section">
+                <div class="demo-title">
+                    📱 Responsive Column Adaptation
+                </div>
+                <div class="demo-description">
+                    Toggle columns based on priority and screen size. Hidden columns are indicated with a counter. Optimized for mobile viewing.
+                </div>
+                
+                <div class="controls">
+                    <input type="text" class="search-box" id="responsiveSearch" placeholder="Search assignments...">
+                </div>
+
+                <div class="responsive-controls">
+                    <div class="column-toggle active" data-column="assignment">Assignment #</div>
+                    <div class="column-toggle active" data-column="name">Employee Name</div>
+                    <div class="column-toggle active" data-column="type">Type</div>
+                    <div class="column-toggle" data-column="grade">Grade</div>
+                    <div class="column-toggle" data-column="cases">Open Cases</div>
+                    <div class="column-toggle" data-column="priority">Priority</div>
+                    <div class="column-toggle" data-column="target">Target %</div>
+                    <div class="column-toggle" data-column="adjustment">Adjustment</div>
+                    <div class="hidden-indicator" id="hiddenIndicator">5 columns hidden</div>
+                </div>
+
+                <div class="stats-bar">
+                    <div class="stat-item">
+                        <div class="stat-value" id="responsiveTotalRecords">0</div>
+                        <div class="stat-label">Total Records</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="responsiveVisibleCols">3</div>
+                        <div class="stat-label">Visible Columns</div>
+                    </div>
+                </div>
+                
+                <div class="table-container">
+                    <table class="progressive-table" id="responsiveTable">
+                        <thead>
+                            <tr id="responsiveHeader">
+                                <th data-column="assignment">Assignment #</th>
+                                <th data-column="name">Employee Name</th>
+                                <th data-column="type">Type</th>
+                                <th data-column="grade" style="display: none;">Grade</th>
+                                <th data-column="cases" style="display: none;">Open Cases</th>
+                                <th data-column="priority" style="display: none;">Priority</th>
+                                <th data-column="target" style="display: none;">Target %</th>
+                                <th data-column="adjustment" style="display: none;">Adjustment</th>
+                            </tr>
+                        </thead>
+                        <tbody id="responsiveTableBody">
+                            <!-- Populated by JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="pagination" id="responsivePagination"></div>
+            </div>
+        </div>
+
+        <!-- Card Layout -->
+        <div id="cards" class="tab-content">
+            <div class="demo-section">
+                <div class="demo-title">
+                    🎴 Card-Based Layout
+                </div>
+                <div class="demo-description">
+                    Transform tabular assignment data into scannable cards with hierarchical information display and contextual actions. Perfect for mobile and touch interfaces.
+                </div>
+                
+                <div class="controls">
+                    <input type="text" class="search-box" id="cardSearch" placeholder="Search assignments or employees...">
+                    <select class="filter-select" id="cardWarningFilter">
+                        <option value="">All Warnings</option>
+                        <option value="Above">Above Target</option>
+                        <option value="Below">Below Target</option>
+                        <option value="Normal">Normal</option>
+                    </select>
+                </div>
+
+                <div class="stats-bar">
+                    <div class="stat-item">
+                        <div class="stat-value" id="cardTotalRecords">0</div>
+                        <div class="stat-label">Total Cards</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="cardHighWorkload">0</div>
+                        <div class="stat-label">High Workload</div>
+                    </div>
+                </div>
+                
+                <div class="cards-container" id="cardsContainer">
+                    <div class="loading">
+                        <div class="spinner"></div>
+                        Loading assignment cards...
+                    </div>
+                </div>
+
+                <div class="pagination" id="cardPagination"></div>
+            </div>
+        </div>
+
+        <!-- Advanced Graphs -->
+        <div id="graphs" class="tab-content">
+            <div class="demo-section">
+                <div class="demo-title">
+                    📈 Advanced Data Visualization Dashboard
+                </div>
+                <div class="demo-description">
+                    Interactive charts and advanced visualizations revealing deep insights from your 1600+ assignment records. Explore workload patterns, performance correlations, and risk indicators through multiple visualization perspectives.
+                </div>
+                
+                <!-- Main Dashboard Grid -->
+                <div class="chart-grid">
+                    <!-- Bubble Chart: Performance vs Workload -->
+                    <div class="chart-container chart-full-width">
+                        <div class="chart-title">
+                            🎯 Performance vs Workload Analysis
+                            <div class="chart-controls">
+                                <button class="chart-btn active" onclick="updateBubbleChart('all')">All Employees</button>
+                                <button class="chart-btn" onclick="updateBubbleChart('R')">Regular</button>
+                                <button class="chart-btn" onclick="updateBubbleChart('C')">Contract</button>
+                                <button class="chart-btn" onclick="updateBubbleChart('T')">Temporary</button>
+                            </div>
+                        </div>
+                        <div class="chart-subtitle">Bubble size represents total assigned cases. Position shows performance vs workload balance.</div>
+                        <svg class="chart-canvas" id="bubbleChart"></svg>
+                        <div class="chart-legend">
+                            <div class="legend-item">
+                                <div class="legend-color" style="background: #48bb78;"></div>
+                                <span>Optimal Performance</span>
+                            </div>
+                            <div class="legend-item">
+                                <div class="legend-color" style="background: #ed8936;"></div>
+                                <span>Moderate Load</span>
+                            </div>
+                            <div class="legend-item">
+                                <div class="legend-color" style="background: #e53e3e;"></div>
+                                <span>Overloaded</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Performance Distribution Chart -->
+                    <div class="chart-container">
+                        <div class="chart-title">📊 Performance Distribution by Grade</div>
+                        <div class="chart-subtitle">Shows average performance targets across different employee grades</div>
+                        <svg class="chart-canvas" id="performanceChart"></svg>
+                    </div>
+
+                    <!-- Workload vs Grade Analysis -->
+                    <div class="chart-container">
+                        <div class="chart-title">⚖️ Workload Analysis by Employee Type</div>
+                        <div class="chart-subtitle">Compares average case loads across Regular, Contract, and Temporary employees</div>
+                        <svg class="chart-canvas" id="workloadChart"></svg>
+                    </div>
+
+                    <!-- Priority Cases Distribution -->
+                    <div class="chart-container">
+                        <div class="chart-title">🎯 Priority Cases by Grade Level</div>
+                        <div class="chart-subtitle">Distribution of high-priority cases across different employee grades</div>
+                        <svg class="chart-canvas" id="priorityChart"></svg>
+                    </div>
+
+                    <!-- Network Graph: Employee Relationship Analysis -->
+                    <div class="chart-container">
+                        <div class="chart-title">🕸️ Performance Cluster Analysis</div>
+                        <div class="chart-subtitle">Network view showing performance similarities and outliers</div>
+                        <svg class="chart-canvas" id="networkChart"></svg>
+                    </div>
+
+                    <!-- Multi-Axis Radar Chart -->
+                    <div class="chart-container chart-full-width">
+                        <div class="chart-title">
+                            🎯 Performance Radar Analysis
+                            <div class="chart-controls">
+                                <button class="chart-btn active" onclick="updateRadarChart('avg')">Average Performance</button>
+                                <button class="chart-btn" onclick="updateRadarChart('top')">Top Performers</button>
+                                <button class="chart-btn" onclick="updateRadarChart('bottom')">Bottom Performers</button>
+                            </div>
+                        </div>
+                        <div class="chart-subtitle">Multi-dimensional performance analysis across key metrics</div>
+                        <svg class="chart-canvas" id="radarChart"></svg>
+                    </div>
+
+                    <!-- Priority vs Timeline Scatter -->
+                    <div class="chart-container">
+                        <div class="chart-title">⏰ Priority Timeline Analysis</div>
+                        <div class="chart-subtitle">Relationship between priority cases and adjustment timeline</div>
+                        <svg class="chart-canvas" id="scatterChart"></svg>
+                    </div>
+
+                    <!-- Risk Assessment Dashboard -->
+                    <div class="chart-container">
+                        <div class="chart-title">⚠️ Risk Assessment Matrix</div>
+                        <div class="chart-subtitle">Identifies employees at risk based on multiple indicators</div>
+                        <svg class="chart-canvas" id="riskChart"></svg>
+                    </div>
+                </div>
+
+                <!-- Insights Panel -->
+                <div class="chart-container">
+                    <div class="chart-title">💡 Key Insights & Recommendations</div>
+                    <div id="insightsPanel" style="padding: 20px; background: #f7fafc; border-radius: 8px; margin-top: 20px;">
+                        <!-- Populated by JavaScript -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Chart Tooltip -->
+        <div class="chart-tooltip" id="chartTooltip"></div>
+    </div>
+
+    <script>
+        // Sample data generator based on the JSON structure
+        function generateSampleData(count = 1600) {
+            const data = [];
+            const names = [
+                'ISMAEL GARCIA', 'BOB LEE', 'SARAH JOHNSON', 'MICHAEL CHEN', 'LISA RODRIGUEZ',
+                'DAVID MARTINEZ', 'EMILY WATSON', 'JAMES WILSON', 'MARIA GONZALEZ', 'ROBERT TAYLOR',
+                'JENNIFER BROWN', 'WILLIAM DAVIS', 'KAREN MILLER', 'DANIEL MOORE', 'NANCY JACKSON',
+                'CHRISTOPHER WHITE', 'BETTY HARRIS', 'MATTHEW MARTIN', 'HELEN THOMPSON', 'ANTHONY GARCIA',
+                'SUSAN ANDERSON', 'JOSEPH THOMAS', 'MARGARET JACKSON', 'CHARLES LOPEZ', 'DOROTHY LEE'
+            ];
+            const employeeTypes = ['R', 'C', 'T'];
+            const grades = [5, 7, 9, 11, 12, 13];
+            const adjustmentReasons = ['J/L', 'VACATION', 'TRAINING', 'MEDICAL', 'OTHER'];
+            const warnings = ['Above', 'Below', 'Normal', ''];
+
+            for (let i = 0; i < count; i++) {
+                const assignmentNumber = 26000000 + Math.floor(Math.random() * 999999);
+                const seid = String.fromCharCode(65 + Math.floor(Math.random() * 26)) + 
+                           Math.floor(Math.random() * 100) + 'XB';
+                const employeeName = names[Math.floor(Math.random() * names.length)];
+                const employeeType = employeeTypes[Math.floor(Math.random() * employeeTypes.length)];
+                const grade = grades[Math.floor(Math.random() * grades.length)];
+                
+                const zipCount = Math.floor(Math.random() * 100);
+                const priorityCount = Math.floor(Math.random() * 20);
+                const highPriorityQueueCount = Math.floor(Math.random() * 50);
+                const openCaseCount = Math.floor(Math.random() * 100);
+                const pendingCaseCount = Math.floor(Math.random() * 20);
+                
+                const percent85Target = Math.floor(Math.random() * 101);
+                const topTarget = Math.floor(Math.random() * 101);
+                const bottomTarget = Math.floor(Math.random() * 101);
+                const adjustmentPercentage = Math.floor(Math.random() * 200);
+                
+                data.push({
+                    assignmentNumber,
+                    seid,
+                    unix: null,
+                    employeeName,
+                    employeeType,
+                    grade,
+                    zipCount,
+                    priorityCount,
+                    highPriorityQueueCount,
+                    casesOnHoldCount: Math.floor(Math.random() * 10),
+                    openCaseCount,
+                    pendingCaseCount,
+                    percent85Target,
+                    topTarget,
+                    bottomTarget,
+                    adjustmentPercentage,
+                    adjustmentReason: adjustmentReasons[Math.floor(Math.random() * adjustmentReasons.length)],
+                    adjustmentUpdateDate: Math.random() > 0.5 ? null : '2024-' + String(Math.floor(Math.random() * 12) + 1).padStart(2, '0') + '-' + String(Math.floor(Math.random() * 28) + 1).padStart(2, '0'),
+                    warning: warnings[Math.floor(Math.random() * warnings.length)],
+                    totalAssignedCases: Math.floor(Math.random() * 200),
+                    openCaseGrade9Count: Math.floor(Math.random() * 20),
+                    openCaseGrade11Count: Math.floor(Math.random() * 50),
+                    openCaseGrade12Count: Math.floor(Math.random() * 30),
+                    openCaseGrade13Count: Math.floor(Math.random() * 10),
+                    pendingCaseGrade9Count: Math.floor(Math.random() * 5),
+                    pendingCaseGrade11Count: Math.floor(Math.random() * 10),
+                    pendingCaseGrade12Count: Math.floor(Math.random() * 8),
+                    pendingCaseGrade13Count: Math.floor(Math.random() * 3)
+                });
+            }
+            return data;
+        }
+
+        // Global data
+        let allData = [];
+        let filteredData = [];
+        const pageSize = 50;
+        let currentPages = {
+            progressive: 1,
+            sticky: 1,
+            responsive: 1,
+            cards: 1
+        };
+
+        function getFilteredData(tabType) {
+            let searchValue = '';
+            let typeFilter = '';
+            let gradeFilter = '';
+            let warningFilter = '';
+
+            switch(tabType) {
+                case 'progressive':
+                    searchValue = document.getElementById('progressiveSearch')?.value.toLowerCase() || '';
+                    typeFilter = document.getElementById('progressiveTypeFilter')?.value || '';
+                    break;
+                case 'sticky':
+                    searchValue = document.getElementById('stickySearch')?.value.toLowerCase() || '';
+                    gradeFilter = document.getElementById('stickyGradeFilter')?.value || '';
+                    typeFilter = document.getElementById('stickyEmployeeTypeFilter')?.value || '';
+                    break;
+                case 'responsive':
+                    searchValue = document.getElementById('responsiveSearch')?.value.toLowerCase() || '';
+                    break;
+                case 'cards':
+                    searchValue = document.getElementById('cardSearch')?.value.toLowerCase() || '';
+                    warningFilter = document.getElementById('cardWarningFilter')?.value || '';
+                    break;
+            }
+
+            return allData.filter(item => {
+                const matchesSearch = !searchValue || 
+                    item.employeeName.toLowerCase().includes(searchValue) ||
+                    item.assignmentNumber.toString().includes(searchValue) ||
+                    item.seid.toLowerCase().includes(searchValue);
+                
+                const matchesType = !typeFilter || item.employeeType === typeFilter;
+                const matchesGrade = !gradeFilter || item.grade.toString() === gradeFilter;
+                const matchesWarning = !warningFilter || item.warning === warningFilter;
+                
+                return matchesSearch && matchesType && matchesGrade && matchesWarning;
+            });
+        }
+
+        // Progressive Disclosure Implementation
+        function initProgressiveDisclosure() {
+            const tbody = document.getElementById('progressiveTableBody');
+            if (!tbody) return;
+            
+            const filtered = getFilteredData('progressive');
+            const startIndex = (currentPages.progressive - 1) * pageSize;
+            const endIndex = Math.min(startIndex + pageSize, filtered.length);
+            const pageData = filtered.slice(startIndex, endIndex);
+            
+            tbody.innerHTML = '';
+            
+            pageData.forEach((emp, index) => {
+                const globalIndex = startIndex + index;
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>
+                        <button class="expand-btn" onclick="toggleExpanded('progressive', ${globalIndex})">+</button>
+                    </td>
+                    <td>${emp.assignmentNumber}</td>
+                    <td>${emp.employeeName}</td>
+                    <td>${emp.employeeType}</td>
+                    <td>${emp.grade}</td>
+                    <td>${emp.openCaseCount}</td>
+                `;
+                tbody.appendChild(row);
+                
+                // Add expanded details row
+                const detailRow = document.createElement('tr');
+                detailRow.innerHTML = `
+                    <td colspan="6">
+                        <div class="expanded-details" id="progressive-details-${globalIndex}">
+                            <div class="detail-grid">
+                                <div class="detail-item">
+                                    <div class="detail-label">SEID</div>
+                                    <div class="detail-value">${emp.seid}</div>
+                                </div>
+                                <div class="detail-item">
+                                    <div class="detail-label">Priority Cases</div>
+                                    <div class="detail-value">${emp.highPriorityQueueCount}</div>
+                                </div>
+                                <div class="detail-item">
+                                    <div class="detail-label">Pending Cases</div>
+                                    <div class="detail-value">${emp.pendingCaseCount}</div>
+                                </div>
+                                <div class="detail-item">
+                                    <div class="detail-label">Target %</div>
+                                    <div class="detail-value">${emp.percent85Target}%</div>
+                                </div>
+                                <div class="detail-item">
+                                    <div class="detail-label">Adjustment %</div>
+                                    <div class="detail-value">${emp.adjustmentPercentage}%</div>
+                                </div>
+                                <div class="detail-item">
+                                    <div class="detail-label">Adjustment Reason</div>
+                                    <div class="detail-value">${emp.adjustmentReason}</div>
+                                </div>
+                                <div class="detail-item">
+                                    <div class="detail-label">Grade 11 Cases</div>
+                                    <div class="detail-value">${emp.openCaseGrade11Count}</div>
+                                </div>
+                                <div class="detail-item">
+                                    <div class="detail-label">Grade 12 Cases</div>
+                                    <div class="detail-value">${emp.openCaseGrade12Count}</div>
+                                </div>
+                                <div class="detail-item">
+                                    <div class="detail-label">Total Assigned</div>
+                                    <div class="detail-value">${emp.totalAssignedCases}</div>
+                                </div>
+                                <div class="detail-item">
+                                    <div class="detail-label">Warning Status</div>
+                                    <div class="detail-value">${emp.warning || 'Normal'}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </td>
+                `;
+                tbody.appendChild(detailRow);
+            });
+
+            updateStats('progressive', filtered);
+            updatePagination('progressive', filtered);
+        }
+
+        function toggleExpanded(tabType, index) {
+            const details = document.getElementById(`${tabType}-details-${index}`);
+            const btns = document.querySelectorAll('.expand-btn');
+            const btn = btns[index % pageSize];
+            
+            if (details && details.classList.contains('show')) {
+                details.classList.remove('show');
+                if (btn) {
+                    btn.textContent = '+';
+                    btn.classList.remove('expanded');
+                }
+            } else if (details) {
+                details.classList.add('show');
+                if (btn) {
+                    btn.textContent = '×';
+                    btn.classList.add('expanded');
+                }
+            }
+        }
+
+        // Sticky Columns Implementation with Enhanced Scroll Sync and All Columns
+        function initStickyColumns() {
+            const stickyBody = document.getElementById('stickyTableBody');
+            const scrollableBody = document.getElementById('scrollableTableBody');
+            const scrollableHeader = document.getElementById('scrollableTableHeader');
+            if (!stickyBody || !scrollableBody || !scrollableHeader) return;
+            
+            const filtered = getFilteredData('sticky');
+            const startIndex = (currentPages.sticky - 1) * pageSize;
+            const endIndex = Math.min(startIndex + pageSize, filtered.length);
+            const pageData = filtered.slice(startIndex, endIndex);
+            
+            // Clear existing content
+            stickyBody.innerHTML = '';
+            scrollableBody.innerHTML = '';
+            scrollableHeader.innerHTML = '';
+            
+            // Define all columns based on JSON structure (excluding sticky ones)
+            const allColumns = [
+                { key: 'seid', label: 'SEID', className: 'col-seid' },
+                { key: 'employeeType', label: 'Type', className: 'col-employee-type' },
+                { key: 'grade', label: 'Grade', className: 'col-grade' },
+                { key: 'zipCount', label: 'Zip Count', className: 'col-zip-count' },
+                { key: 'priorityCount', label: 'Priority Count', className: 'col-priority-count' },
+                { key: 'highPriorityQueueCount', label: 'High Priority', className: 'col-high-priority' },
+                { key: 'casesOnHoldCount', label: 'Cases on Hold', className: 'col-cases-hold' },
+                { key: 'openCaseCount', label: 'Open Cases', className: 'col-open-cases' },
+                { key: 'pendingCaseCount', label: 'Pending Cases', className: 'col-pending-cases' },
+                { key: 'percent85Target', label: '85% Target', className: 'col-target-85' },
+                { key: 'topTarget', label: 'Top Target', className: 'col-target-top' },
+                { key: 'bottomTarget', label: 'Bottom Target', className: 'col-target-bottom' },
+                { key: 'adjustmentPercentage', label: 'Adjustment %', className: 'col-adjustment-pct' },
+                { key: 'adjustmentReason', label: 'Adj. Reason', className: 'col-adjustment-reason' },
+                { key: 'adjustmentUpdateDate', label: 'Adj. Date', className: 'col-adjustment-date' },
+                { key: 'warning', label: 'Warning', className: 'col-warning' },
+                { key: 'totalAssignedCases', label: 'Total Assigned', className: 'col-total-assigned' },
+                { key: 'openCaseGrade9Count', label: 'Grade 9 Open', className: 'col-grade-9' },
+                { key: 'openCaseGrade11Count', label: 'Grade 11 Open', className: 'col-grade-11' },
+                { key: 'openCaseGrade12Count', label: 'Grade 12 Open', className: 'col-grade-12' },
+                { key: 'openCaseGrade13Count', label: 'Grade 13 Open', className: 'col-grade-13' },
+                { key: 'pendingCaseGrade9Count', label: 'Grade 9 Pending', className: 'col-grade-9' },
+                { key: 'pendingCaseGrade11Count', label: 'Grade 11 Pending', className: 'col-grade-11' },
+                { key: 'pendingCaseGrade12Count', label: 'Grade 12 Pending', className: 'col-grade-12' },
+                { key: 'pendingCaseGrade13Count', label: 'Grade 13 Pending', className: 'col-grade-13' }
+            ];
+            
+            // Create scrollable headers
+            allColumns.forEach(column => {
+                const th = document.createElement('th');
+                th.textContent = column.label;
+                th.className = column.className;
+                scrollableHeader.appendChild(th);
+            });
+            
+            // Create data rows
+            pageData.forEach(emp => {
+                // Sticky columns (Assignment #, Employee Name)
+                const stickyRow = document.createElement('tr');
+                stickyRow.innerHTML = `
+                    <td class="col-assignment">${emp.assignmentNumber}</td>
+                    <td class="col-employee-name">${emp.employeeName}</td>
+                `;
+                stickyBody.appendChild(stickyRow);
+                
+                // Scrollable columns
+                const scrollableRow = document.createElement('tr');
+                const scrollableCells = allColumns.map(column => {
+                    let value = emp[column.key];
+                    
+                    // Format specific values
+                    if (column.key.includes('Target') || column.key.includes('adjustmentPercentage')) {
+                        value = value + '%';
+                    } else if (column.key === 'adjustmentUpdateDate') {
+                        value = value || 'N/A';
+                    } else if (column.key === 'warning') {
+                        value = value || 'Normal';
+                        return `<td class="${column.className}"><span class="card-status status-${(value || 'normal').toLowerCase()}">${value}</span></td>`;
+                    } else if (value === null || value === undefined) {
+                        value = 'N/A';
+                    }
+                    
+                    return `<td class="${column.className}">${value}</td>`;
+                }).join('');
+                
+                scrollableRow.innerHTML = scrollableCells;
+                scrollableBody.appendChild(scrollableRow);
+            });
+
+            // Update total columns count
+            const totalColsElement = document.getElementById('stickyTotalColumns');
+            if (totalColsElement) {
+                totalColsElement.textContent = allColumns.length + 2; // +2 for sticky columns
+            }
+
+            // Setup scroll synchronization
+            setupScrollSynchronization();
+
+            updateStats('sticky', filtered);
+            updatePagination('sticky', filtered);
+        }
+
+        // Enhanced scroll synchronization function
+        function setupScrollSynchronization() {
+            const stickyColumnsBody = document.getElementById('stickyColumnsBody');
+            const scrollableColumnsBody = document.getElementById('scrollableColumnsBody');
+            const indicator = document.getElementById('scrollSyncIndicator');
+            
+            if (!stickyColumnsBody || !scrollableColumnsBody) return;
+            
+            let isSyncing = false;
+            
+            // Sync sticky columns vertical scroll with scrollable columns
+            stickyColumnsBody.addEventListener('scroll', function() {
+                if (isSyncing) return;
+                isSyncing = true;
+                scrollableColumnsBody.scrollTop = this.scrollTop;
+                updateSyncIndicator('Syncing from Left', indicator);
+                setTimeout(() => {
+                    isSyncing = false;
+                    updateSyncIndicator('Scroll Sync: Active', indicator);
+                }, 100);
+            });
+            
+            // Sync scrollable columns vertical scroll with sticky columns
+            scrollableColumnsBody.addEventListener('scroll', function() {
+                if (isSyncing) return;
+                isSyncing = true;
+                stickyColumnsBody.scrollTop = this.scrollTop;
+                updateSyncIndicator('Syncing from Right', indicator);
+                setTimeout(() => {
+                    isSyncing = false;
+                    updateSyncIndicator('Scroll Sync: Active', indicator);
+                }, 100);
+            });
+            
+            // Visual feedback for horizontal scrolling
+            scrollableColumnsBody.addEventListener('scroll', function() {
+                if (this.scrollLeft > 0) {
+                    updateSyncIndicator(`H-Scroll: ${Math.round(this.scrollLeft)}px`, indicator);
+                } else if (!isSyncing) {
+                    updateSyncIndicator('Scroll Sync: Active', indicator);
+                }
+            });
+        }
+        
+        function updateSyncIndicator(message, indicator) {
+            if (indicator) {
+                indicator.textContent = message;
+                indicator.style.background = message.includes('Syncing') ? 
+                    'rgba(34, 197, 94, 0.1)' : 'rgba(102, 126, 234, 0.1)';
+                indicator.style.color = message.includes('Syncing') ? 
+                    '#059669' : '#667eea';
+            }
+        }
+
+        // Responsive Adaptation Implementation
+        function initResponsiveColumns() {
+            const tbody = document.getElementById('responsiveTableBody');
+            if (!tbody) return;
+            
+            const filtered = getFilteredData('responsive');
+            const startIndex = (currentPages.responsive - 1) * pageSize;
+            const endIndex = Math.min(startIndex + pageSize, filtered.length);
+            const pageData = filtered.slice(startIndex, endIndex);
+            
+            tbody.innerHTML = '';
+            
+            pageData.forEach(emp => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td data-column="assignment">${emp.assignmentNumber}</td>
+                    <td data-column="name">${emp.employeeName}</td>
+                    <td data-column="type">${emp.employeeType}</td>
+                    <td data-column="grade" style="display: none;">${emp.grade}</td>
+                    <td data-column="cases" style="display: none;">${emp.openCaseCount}</td>
+                    <td data-column="priority" style="display: none;">${emp.highPriorityQueueCount}</td>
+                    <td data-column="target" style="display: none;">${emp.percent85Target}%</td>
+                    <td data-column="adjustment" style="display: none;">${emp.adjustmentPercentage}%</td>
+                `;
+                tbody.appendChild(row);
+            });
+            
+            updateStats('responsive', filtered);
+            updatePagination('responsive', filtered);
+            updateHiddenIndicator();
+        }
+
+        function updateHiddenIndicator() {
+            const hiddenCount = document.querySelectorAll('.column-toggle:not(.active)').length;
+            const visibleCount = document.querySelectorAll('.column-toggle.active').length;
+            const indicator = document.getElementById('hiddenIndicator');
+            const visibleElement = document.getElementById('responsiveVisibleCols');
+            
+            if (indicator) {
+                indicator.textContent = `${hiddenCount} columns hidden`;
+                indicator.style.display = hiddenCount > 0 ? 'block' : 'none';
+            }
+            if (visibleElement) {
+                visibleElement.textContent = visibleCount;
+            }
+        }
+
+        // Card Layout Implementation
+        function initCardLayout() {
+            const container = document.getElementById('cardsContainer');
+            if (!container) return;
+            
+            const filtered = getFilteredData('cards');
+            const startIndex = (currentPages.cards - 1) * pageSize;
+            const endIndex = Math.min(startIndex + pageSize, filtered.length);
+            const pageData = filtered.slice(startIndex, endIndex);
+            
+            container.innerHTML = '';
+            
+            pageData.forEach(emp => {
+                const workloadStatus = emp.openCaseCount > 70 ? 'high' : 
+                                     emp.openCaseCount > 40 ? 'medium' : 'low';
+                
+                const card = document.createElement('div');
+                card.className = 'data-card';
+                
+                card.innerHTML = `
+                    <div class="card-header">
+                        <div>
+                            <div class="card-title">${emp.employeeName}</div>
+                            <div class="card-subtitle">${emp.assignmentNumber} • ${emp.employeeType} • Grade ${emp.grade}</div>
+                        </div>
+                        <div class="card-status status-${workloadStatus}">${workloadStatus.toUpperCase()}</div>
+                    </div>
+                    
+                    <div class="card-body">
+                        <div class="card-field">
+                            <div class="card-field-label">SEID</div>
+                            <div class="card-field-value">${emp.seid}</div>
+                        </div>
+                        <div class="card-field">
+                            <div class="card-field-label">Open Cases</div>
+                            <div class="card-field-value">${emp.openCaseCount}</div>
+                        </div>
+                        <div class="card-field">
+                            <div class="card-field-label">Priority Cases</div>
+                            <div class="card-field-value">${emp.highPriorityQueueCount}</div>
+                        </div>
+                        <div class="card-field">
+                            <div class="card-field-label">Target %</div>
+                            <div class="card-field-value">${emp.percent85Target}%</div>
+                        </div>
+                        <div class="card-field">
+                            <div class="card-field-label">Adjustment %</div>
+                            <div class="card-field-value">${emp.adjustmentPercentage}%</div>
+                        </div>
+                        <div class="card-field">
+                            <div class="card-field-label">Warning Status</div>
+                            <div class="card-field-value">${emp.warning || 'Normal'}</div>
+                        </div>
+                    </div>
+                    
+                    <div class="card-actions">
+                        <button class="card-btn card-btn-primary">View Details</button>
+                        <button class="card-btn card-btn-secondary">Edit Assignment</button>
+                    </div>
+                `;
+                
+                container.appendChild(card);
+            });
+
+            updateStats('cards', filtered);
+            updatePagination('cards', filtered);
+        }
+
+        // Statistics Update Functions
+        function updateStats(tabType, filtered) {
+            const totalCases = filtered.reduce((sum, item) => sum + item.openCaseCount, 0);
+            const avgCases = filtered.length > 0 ? Math.round(totalCases / filtered.length) : 0;
+            const highPriority = filtered.reduce((sum, item) => sum + item.highPriorityQueueCount, 0);
+            const highWorkload = filtered.filter(item => item.openCaseCount > 70).length;
+
+            switch(tabType) {
+                case 'progressive':
+                    const progTotal = document.getElementById('progressiveTotalRecords');
+                    const progFiltered = document.getElementById('progressiveFilteredRecords');
+                    const progAvg = document.getElementById('progressiveAvgCases');
+                    if (progTotal) progTotal.textContent = allData.length;
+                    if (progFiltered) progFiltered.textContent = filtered.length;
+                    if (progAvg) progAvg.textContent = avgCases;
+                    break;
+                case 'sticky':
+                    const stickyTotal = document.getElementById('stickyTotalRecords');
+                    const stickyHigh = document.getElementById('stickyHighPriority');
+                    if (stickyTotal) stickyTotal.textContent = filtered.length;
+                    if (stickyHigh) stickyHigh.textContent = highPriority;
+                    break;
+                case 'responsive':
+                    const respTotal = document.getElementById('responsiveTotalRecords');
+                    if (respTotal) respTotal.textContent = filtered.length;
+                    break;
+                case 'cards':
+                    const cardTotal = document.getElementById('cardTotalRecords');
+                    const cardHigh = document.getElementById('cardHighWorkload');
+                    if (cardTotal) cardTotal.textContent = filtered.length;
+                    if (cardHigh) cardHigh.textContent = highWorkload;
+                    break;
+            }
+        }
+
+        // Pagination Functions
+        function updatePagination(tabType, filtered) {
+            const container = document.getElementById(`${tabType}Pagination`);
+            if (!container) return;
+            
+            const totalPages = Math.ceil(filtered.length / pageSize);
+            const currentPage = currentPages[tabType];
+            
+            container.innerHTML = '';
+            
+            if (totalPages <= 1) return;
+            
+            // Previous button
+            const prevBtn = document.createElement('button');
+            prevBtn.textContent = '← Previous';
+            prevBtn.disabled = currentPage === 1;
+            prevBtn.onclick = () => {
+                if (currentPage > 1) {
+                    currentPages[tabType]--;
+                    updateTabContent(tabType);
+                }
+            };
+            container.appendChild(prevBtn);
+            
+            // Page numbers
+            const startPage = Math.max(1, currentPage - 2);
+            const endPage = Math.min(totalPages, currentPage + 2);
+            
+            for (let i = startPage; i <= endPage; i++) {
+                const pageBtn = document.createElement('button');
+                pageBtn.textContent = i;
+                pageBtn.className = i === currentPage ? 'current-page' : '';
+                pageBtn.onclick = () => {
+                    currentPages[tabType] = i;
+                    updateTabContent(tabType);
+                };
+                container.appendChild(pageBtn);
+            }
+            
+            // Next button
+            const nextBtn = document.createElement('button');
+            nextBtn.textContent = 'Next →';
+            nextBtn.disabled = currentPage === totalPages;
+            nextBtn.onclick = () => {
+                if (currentPage < totalPages) {
+                    currentPages[tabType]++;
+                    updateTabContent(tabType);
+                }
+            };
+            container.appendChild(nextBtn);
+            
+            // Page info
+            const info = document.createElement('span');
+            info.textContent = `Page ${currentPage} of ${totalPages} (${filtered.length} records)`;
+            info.style.marginLeft = '20px';
+            info.style.color = '#718096';
+            container.appendChild(info);
+        }
+
+        function updateTabContent(tabType) {
+            switch(tabType) {
+                case 'progressive':
+                    initProgressiveDisclosure();
+                    break;
+                case 'sticky':
+                    initStickyColumns();
+                    break;
+                case 'responsive':
+                    initResponsiveColumns();
+                    break;
+                case 'cards':
+                    initCardLayout();
+                    break;
+            }
+        }
+
+        // Advanced Charts Implementation
+        function createAdvancedCharts() {
+            createBubbleChart();
+            createPerformanceChart();
+            createWorkloadChart();
+            createPriorityChart();
+            createNetworkChart();
+            createRadarChart();
+            createScatterChart();
+            createRiskChart();
+            generateInsights();
+        }
+
+        function createBubbleChart() {
+            const svg = document.getElementById('bubbleChart');
+            if (!svg) return;
+            
+            svg.innerHTML = '';
+            const width = 800;
+            const height = 300;
+            const margin = { top: 20, right: 20, bottom: 40, left: 60 };
+            const chartWidth = width - margin.left - margin.right;
+            const chartHeight = height - margin.top - margin.bottom;
+            
+            svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+            
+            // Process data for bubble chart with proper filtering and colors
+            const bubbleData = allData.slice(0, 50).map(emp => ({
+                x: emp.openCaseCount,
+                y: emp.percent85Target,
+                r: Math.max(3, Math.sqrt(emp.totalAssignedCases) / 3),
+                name: emp.employeeName,
+                type: emp.employeeType,
+                grade: emp.grade,
+                totalCases: emp.totalAssignedCases
+            }));
+            
+            const maxX = Math.max(...bubbleData.map(d => d.x)) || 100;
+            const maxY = Math.max(...bubbleData.map(d => d.y)) || 100;
+            
+            // Create chart group
+            const chartGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            chartGroup.setAttribute('transform', `translate(${margin.left}, ${margin.top})`);
+            svg.appendChild(chartGroup);
+            
+            // Create bubbles with proper colors
+            bubbleData.forEach(d => {
+                const cx = (d.x / maxX) * chartWidth;
+                const cy = chartHeight - (d.y / maxY) * chartHeight;
+                
+                // Color by employee type
+                let fillColor = '#48bb78'; // Regular - Green
+                if (d.type === 'C') fillColor = '#ed8936'; // Contract - Orange
+                if (d.type === 'T') fillColor = '#e53e3e'; // Temporary - Red
+                
+                const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                circle.setAttribute('cx', cx);
+                circle.setAttribute('cy', cy);
+                circle.setAttribute('r', d.r);
+                circle.setAttribute('fill', fillColor);
+                circle.setAttribute('opacity', '0.7');
+                circle.setAttribute('stroke', 'white');
+                circle.setAttribute('stroke-width', '2');
+                circle.style.cursor = 'pointer';
+                
+                // Add hover effect
+                circle.addEventListener('mouseover', function(e) {
+                    showTooltip(e, `${d.name}<br>Type: ${d.type === 'R' ? 'Regular' : d.type === 'C' ? 'Contract' : 'Temporary'}<br>Cases: ${d.x}<br>Target: ${d.y}%<br>Total Assigned: ${d.totalCases}`);
+                    this.setAttribute('opacity', '1');
+                    this.setAttribute('stroke-width', '3');
+                });
+                circle.addEventListener('mouseout', function() {
+                    hideTooltip();
+                    this.setAttribute('opacity', '0.7');
+                    this.setAttribute('stroke-width', '2');
+                });
+                
+                chartGroup.appendChild(circle);
+            });
+            
+            // Add axes
+            addAxes(chartGroup, chartWidth, chartHeight, 'Open Cases', 'Target %');
+        }
+
+        function createPerformanceChart() {
+            const svg = document.getElementById('performanceChart');
+            if (!svg) return;
+            
+            svg.innerHTML = '';
+            const width = 380;
+            const height = 260;
+            const margin = { top: 20, right: 20, bottom: 50, left: 50 };
+            const chartWidth = width - margin.left - margin.right;
+            const chartHeight = height - margin.top - margin.bottom;
+            
+            svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+            
+            // Group data by grade and calculate averages
+            const grades = [5, 7, 9, 11, 12, 13];
+            const performanceData = grades.map(grade => {
+                const gradeEmployees = allData.filter(emp => emp.grade === grade);
+                const avgPerformance = gradeEmployees.length > 0 ? 
+                    gradeEmployees.reduce((sum, emp) => sum + emp.percent85Target, 0) / gradeEmployees.length : 0;
+                return { grade, performance: avgPerformance, count: gradeEmployees.length };
+            });
+            
+            const maxPerformance = Math.max(...performanceData.map(d => d.performance));
+            const barWidth = chartWidth / grades.length * 0.7;
+            const barSpacing = chartWidth / grades.length * 0.3;
+            
+            const chartGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            chartGroup.setAttribute('transform', `translate(${margin.left}, ${margin.top})`);
+            svg.appendChild(chartGroup);
+            
+            performanceData.forEach((d, i) => {
+                const barHeight = (d.performance / maxPerformance) * chartHeight;
+                const x = i * (barWidth + barSpacing);
+                const y = chartHeight - barHeight;
+                
+                // Color based on performance level
+                let fillColor = '#e53e3e'; // Low performance - Red
+                if (d.performance > 70) fillColor = '#ed8936'; // Medium - Orange
+                if (d.performance > 85) fillColor = '#48bb78'; // High - Green
+                
+                const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                rect.setAttribute('x', x);
+                rect.setAttribute('y', y);
+                rect.setAttribute('width', barWidth);
+                rect.setAttribute('height', barHeight);
+                rect.setAttribute('fill', fillColor);
+                rect.setAttribute('stroke', 'white');
+                rect.setAttribute('stroke-width', '2');
+                rect.style.cursor = 'pointer';
+                
+                rect.addEventListener('mouseover', function(e) {
+                    showTooltip(e, `Grade ${d.grade}<br>Avg Performance: ${d.performance.toFixed(1)}%<br>Employees: ${d.count}`);
+                    this.setAttribute('opacity', '0.8');
+                });
+                rect.addEventListener('mouseout', function() {
+                    hideTooltip();
+                    this.setAttribute('opacity', '1');
+                });
+                
+                chartGroup.appendChild(rect);
+                
+                // Add grade labels
+                const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                text.setAttribute('x', x + barWidth / 2);
+                text.setAttribute('y', chartHeight + 20);
+                text.setAttribute('text-anchor', 'middle');
+                text.setAttribute('font-size', '12');
+                text.setAttribute('fill', '#4a5568');
+                text.textContent = `Grade ${d.grade}`;
+                chartGroup.appendChild(text);
+                
+                // Add value labels
+                const valueText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                valueText.setAttribute('x', x + barWidth / 2);
+                valueText.setAttribute('y', y - 5);
+                valueText.setAttribute('text-anchor', 'middle');
+                valueText.setAttribute('font-size', '11');
+                valueText.setAttribute('fill', '#2d3748');
+                valueText.setAttribute('font-weight', 'bold');
+                valueText.textContent = `${d.performance.toFixed(0)}%`;
+                chartGroup.appendChild(valueText);
+            });
+            
+            // Add Y-axis
+            const yAxis = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            yAxis.setAttribute('x1', 0);
+            yAxis.setAttribute('y1', 0);
+            yAxis.setAttribute('x2', 0);
+            yAxis.setAttribute('y2', chartHeight);
+            yAxis.setAttribute('stroke', '#e2e8f0');
+            yAxis.setAttribute('stroke-width', '2');
+            chartGroup.appendChild(yAxis);
+        }
+
+        function createWorkloadChart() {
+            const svg = document.getElementById('workloadChart');
+            if (!svg) return;
+            
+            svg.innerHTML = '';
+            const width = 380;
+            const height = 260;
+            const margin = { top: 20, right: 20, bottom: 50, left: 50 };
+            const chartWidth = width - margin.left - margin.right;
+            const chartHeight = height - margin.top - margin.bottom;
+            
+            svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+            
+            // Group data by employee type
+            const types = ['R', 'C', 'T'];
+            const typeLabels = { 'R': 'Regular', 'C': 'Contract', 'T': 'Temporary' };
+            const workloadData = types.map(type => {
+                const typeEmployees = allData.filter(emp => emp.employeeType === type);
+                const avgCases = typeEmployees.length > 0 ? 
+                    typeEmployees.reduce((sum, emp) => sum + emp.openCaseCount, 0) / typeEmployees.length : 0;
+                const avgTotal = typeEmployees.length > 0 ? 
+                    typeEmployees.reduce((sum, emp) => sum + emp.totalAssignedCases, 0) / typeEmployees.length : 0;
+                return { 
+                    type, 
+                    label: typeLabels[type], 
+                    avgCases: avgCases, 
+                    avgTotal: avgTotal,
+                    count: typeEmployees.length 
+                };
+            });
+            
+            const maxCases = Math.max(...workloadData.map(d => d.avgCases));
+            const barWidth = chartWidth / types.length * 0.6;
+            const barSpacing = chartWidth / types.length * 0.4;
+            
+            const chartGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            chartGroup.setAttribute('transform', `translate(${margin.left}, ${margin.top})`);
+            svg.appendChild(chartGroup);
+            
+            workloadData.forEach((d, i) => {
+                const barHeight = (d.avgCases / maxCases) * chartHeight;
+                const x = i * (barWidth + barSpacing);
+                const y = chartHeight - barHeight;
+                
+                // Color by type
+                let fillColor = '#48bb78'; // Regular - Green
+                if (d.type === 'C') fillColor = '#ed8936'; // Contract - Orange
+                if (d.type === 'T') fillColor = '#e53e3e'; // Temporary - Red
+                
+                const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                rect.setAttribute('x', x);
+                rect.setAttribute('y', y);
+                rect.setAttribute('width', barWidth);
+                rect.setAttribute('height', barHeight);
+                rect.setAttribute('fill', fillColor);
+                rect.setAttribute('stroke', 'white');
+                rect.setAttribute('stroke-width', '2');
+                rect.style.cursor = 'pointer';
+                
+                rect.addEventListener('mouseover', function(e) {
+                    showTooltip(e, `${d.label}<br>Avg Open Cases: ${d.avgCases.toFixed(1)}<br>Avg Total Cases: ${d.avgTotal.toFixed(1)}<br>Employees: ${d.count}`);
+                    this.setAttribute('opacity', '0.8');
+                });
+                rect.addEventListener('mouseout', function() {
+                    hideTooltip();
+                    this.setAttribute('opacity', '1');
+                });
+                
+                chartGroup.appendChild(rect);
+                
+                // Add type labels
+                const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                text.setAttribute('x', x + barWidth / 2);
+                text.setAttribute('y', chartHeight + 20);
+                text.setAttribute('text-anchor', 'middle');
+                text.setAttribute('font-size', '12');
+                text.setAttribute('fill', '#4a5568');
+                text.textContent = d.label;
+                chartGroup.appendChild(text);
+                
+                // Add value labels
+                const valueText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                valueText.setAttribute('x', x + barWidth / 2);
+                valueText.setAttribute('y', y - 5);
+                valueText.setAttribute('text-anchor', 'middle');
+                valueText.setAttribute('font-size', '11');
+                valueText.setAttribute('fill', '#2d3748');
+                valueText.setAttribute('font-weight', 'bold');
+                valueText.textContent = `${d.avgCases.toFixed(0)}`;
+                chartGroup.appendChild(valueText);
+            });
+            
+            // Add Y-axis
+            const yAxis = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            yAxis.setAttribute('x1', 0);
+            yAxis.setAttribute('y1', 0);
+            yAxis.setAttribute('x2', 0);
+            yAxis.setAttribute('y2', chartHeight);
+            yAxis.setAttribute('stroke', '#e2e8f0');
+            yAxis.setAttribute('stroke-width', '2');
+            chartGroup.appendChild(yAxis);
+        }
+
+        function createPriorityChart() {
+            const svg = document.getElementById('priorityChart');
+            if (!svg) return;
+            
+            svg.innerHTML = '';
+            const width = 380;
+            const height = 260;
+            const margin = { top: 20, right: 20, bottom: 50, left: 50 };
+            const chartWidth = width - margin.left - margin.right;
+            const chartHeight = height - margin.top - margin.bottom;
+            
+            svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+            
+            // Create stacked bar chart for priority cases by grade
+            const grades = [5, 7, 9, 11, 12, 13];
+            const priorityData = grades.map(grade => {
+                const gradeEmployees = allData.filter(emp => emp.grade === grade);
+                const totalPriority = gradeEmployees.reduce((sum, emp) => sum + emp.highPriorityQueueCount, 0);
+                const avgPriority = gradeEmployees.length > 0 ? totalPriority / gradeEmployees.length : 0;
+                
+                // Categorize priority levels
+                const lowPriority = gradeEmployees.filter(emp => emp.highPriorityQueueCount < 10).length;
+                const medPriority = gradeEmployees.filter(emp => emp.highPriorityQueueCount >= 10 && emp.highPriorityQueueCount < 25).length;
+                const highPriority = gradeEmployees.filter(emp => emp.highPriorityQueueCount >= 25).length;
+                
+                return { 
+                    grade, 
+                    avgPriority, 
+                    low: lowPriority, 
+                    medium: medPriority, 
+                    high: highPriority,
+                    total: gradeEmployees.length 
+                };
+            });
+            
+            const maxTotal = Math.max(...priorityData.map(d => d.total)) || 1;
+            const barWidth = chartWidth / grades.length * 0.7;
+            const barSpacing = chartWidth / grades.length * 0.3;
+            
+            const chartGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            chartGroup.setAttribute('transform', `translate(${margin.left}, ${margin.top})`);
+            svg.appendChild(chartGroup);
+            
+            priorityData.forEach((d, i) => {
+                const x = i * (barWidth + barSpacing);
+                const totalHeight = (d.total / maxTotal) * chartHeight;
+                
+                // Calculate heights for each segment
+                const lowHeight = (d.low / d.total) * totalHeight;
+                const medHeight = (d.medium / d.total) * totalHeight;
+                const highHeight = (d.high / d.total) * totalHeight;
+                
+                let currentY = chartHeight;
+                
+                // Low priority (bottom - green)
+                if (d.low > 0) {
+                    const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                    rect.setAttribute('x', x);
+                    rect.setAttribute('y', currentY - lowHeight);
+                    rect.setAttribute('width', barWidth);
+                    rect.setAttribute('height', lowHeight);
+                    rect.setAttribute('fill', '#48bb78');
+                    rect.setAttribute('stroke', 'white');
+                    rect.setAttribute('stroke-width', '1');
+                    rect.style.cursor = 'pointer';
+                    
+                    rect.addEventListener('mouseover', function(e) {
+                        showTooltip(e, `Grade ${d.grade} - Low Priority<br>Employees: ${d.low}<br>Cases: <10 priority cases`);
+                    });
+                    rect.addEventListener('mouseout', hideTooltip);
+                    
+                    chartGroup.appendChild(rect);
+                    currentY -= lowHeight;
+                }
+                
+                // Medium priority (middle - orange)
+                if (d.medium > 0) {
+                    const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                    rect.setAttribute('x', x);
+                    rect.setAttribute('y', currentY - medHeight);
+                    rect.setAttribute('width', barWidth);
+                    rect.setAttribute('height', medHeight);
+                    rect.setAttribute('fill', '#ed8936');
+                    rect.setAttribute('stroke', 'white');
+                    rect.setAttribute('stroke-width', '1');
+                    rect.style.cursor = 'pointer';
+                    
+                    rect.addEventListener('mouseover', function(e) {
+                        showTooltip(e, `Grade ${d.grade} - Medium Priority<br>Employees: ${d.medium}<br>Cases: 10-24 priority cases`);
+                    });
+                    rect.addEventListener('mouseout', hideTooltip);
+                    
+                    chartGroup.appendChild(rect);
+                    currentY -= medHeight;
+                }
+                
+                // High priority (top - red)
+                if (d.high > 0) {
+                    const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                    rect.setAttribute('x', x);
+                    rect.setAttribute('y', currentY - highHeight);
+                    rect.setAttribute('width', barWidth);
+                    rect.setAttribute('height', highHeight);
+                    rect.setAttribute('fill', '#e53e3e');
+                    rect.setAttribute('stroke', 'white');
+                    rect.setAttribute('stroke-width', '1');
+                    rect.style.cursor = 'pointer';
+                    
+                    rect.addEventListener('mouseover', function(e) {
+                        showTooltip(e, `Grade ${d.grade} - High Priority<br>Employees: ${d.high}<br>Cases: 25+ priority cases`);
+                    });
+                    rect.addEventListener('mouseout', hideTooltip);
+                    
+                    chartGroup.appendChild(rect);
+                }
+                
+                // Add grade labels
+                const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                text.setAttribute('x', x + barWidth / 2);
+                text.setAttribute('y', chartHeight + 20);
+                text.setAttribute('text-anchor', 'middle');
+                text.setAttribute('font-size', '12');
+                text.setAttribute('fill', '#4a5568');
+                text.textContent = `G${d.grade}`;
+                chartGroup.appendChild(text);
+                
+                // Add total count on top
+                const totalText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                totalText.setAttribute('x', x + barWidth / 2);
+                totalText.setAttribute('y', chartHeight - totalHeight - 5);
+                totalText.setAttribute('text-anchor', 'middle');
+                totalText.setAttribute('font-size', '10');
+                totalText.setAttribute('fill', '#2d3748');
+                totalText.setAttribute('font-weight', 'bold');
+                totalText.textContent = d.total;
+                chartGroup.appendChild(totalText);
+            });
+            
+            // Add Y-axis
+            const yAxis = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            yAxis.setAttribute('x1', 0);
+            yAxis.setAttribute('y1', 0);
+            yAxis.setAttribute('x2', 0);
+            yAxis.setAttribute('y2', chartHeight);
+            yAxis.setAttribute('stroke', '#e2e8f0');
+            yAxis.setAttribute('stroke-width', '2');
+            chartGroup.appendChild(yAxis);
+            
+            // Add legend
+            const legendY = chartHeight + 35;
+            const legendItems = [
+                { color: '#48bb78', label: 'Low (<10)' },
+                { color: '#ed8936', label: 'Medium (10-24)' },
+                { color: '#e53e3e', label: 'High (25+)' }
+            ];
+            
+            legendItems.forEach((item, i) => {
+                const legendX = i * 80;
+                
+                const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                rect.setAttribute('x', legendX);
+                rect.setAttribute('y', legendY);
+                rect.setAttribute('width', 12);
+                rect.setAttribute('height', 12);
+                rect.setAttribute('fill', item.color);
+                chartGroup.appendChild(rect);
+                
+                const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                text.setAttribute('x', legendX + 16);
+                text.setAttribute('y', legendY + 9);
+                text.setAttribute('font-size', '10');
+                text.setAttribute('fill', '#4a5568');
+                text.textContent = item.label;
+                chartGroup.appendChild(text);
+            });
+        }
+
+        function createNetworkChart() {
+            const svg = document.getElementById('networkChart');
+            if (!svg) return;
+            
+            svg.innerHTML = '';
+            const width = 380;
+            const height = 260;
+            
+            svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+            
+            // Create simplified network of top performers
+            const topPerformers = allData
+                .filter(emp => emp.percent85Target > 80)
+                .slice(0, 15);
+            
+            const nodes = topPerformers.map((emp, i) => ({
+                x: 50 + (i % 5) * 70,
+                y: 50 + Math.floor(i / 5) * 70,
+                r: Math.max(5, emp.openCaseCount / 10),
+                name: emp.employeeName,
+                performance: emp.percent85Target
+            }));
+            
+            // Create connections between similar performers
+            nodes.forEach((node1, i) => {
+                nodes.slice(i + 1).forEach(node2 => {
+                    const perfDiff = Math.abs(node1.performance - node2.performance);
+                    if (perfDiff < 10) {
+                        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                        line.setAttribute('x1', node1.x);
+                        line.setAttribute('y1', node1.y);
+                        line.setAttribute('x2', node2.x);
+                        line.setAttribute('y2', node2.y);
+                        line.setAttribute('class', 'network-link');
+                        svg.appendChild(line);
+                    }
+                });
+            });
+            
+            // Create nodes
+            nodes.forEach(node => {
+                const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                circle.setAttribute('cx', node.x);
+                circle.setAttribute('cy', node.y);
+                circle.setAttribute('r', node.r);
+                circle.setAttribute('fill', '#667eea');
+                circle.setAttribute('class', 'network-node');
+                
+                circle.addEventListener('mouseover', function(e) {
+                    showTooltip(e, `${node.name}<br>Performance: ${node.performance}%`);
+                });
+                circle.addEventListener('mouseout', hideTooltip);
+                
+                svg.appendChild(circle);
+            });
+        }
+
+        function createRadarChart() {
+            const svg = document.getElementById('radarChart');
+            if (!svg) return;
+            
+            svg.innerHTML = '';
+            const width = 800;
+            const height = 300;
+            const centerX = width / 2;
+            const centerY = height / 2;
+            const radius = 100;
+            
+            svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+            
+            const metrics = [
+                'Cases Load', 'Priority Handle', 'Target Achievement', 
+                'Grade Balance', 'Adjustment Rate', 'Overall Performance'
+            ];
+            
+            // Calculate average performance metrics
+            const avgMetrics = metrics.map((metric, i) => {
+                switch(i) {
+                    case 0: return allData.reduce((sum, emp) => sum + emp.openCaseCount, 0) / allData.length / 100;
+                    case 1: return allData.reduce((sum, emp) => sum + emp.highPriorityQueueCount, 0) / allData.length / 20;
+                    case 2: return allData.reduce((sum, emp) => sum + emp.percent85Target, 0) / allData.length / 100;
+                    case 3: return allData.reduce((sum, emp) => sum + emp.grade, 0) / allData.length / 13;
+                    case 4: return allData.reduce((sum, emp) => sum + emp.adjustmentPercentage, 0) / allData.length / 100;
+                    default: return 0.75;
+                }
+            });
+            
+            // Draw radar grid
+            for (let i = 0; i < 5; i++) {
+                const r = (radius / 5) * (i + 1);
+                const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                circle.setAttribute('cx', centerX);
+                circle.setAttribute('cy', centerY);
+                circle.setAttribute('r', r);
+                circle.setAttribute('fill', 'none');
+                circle.setAttribute('stroke', '#e2e8f0');
+                circle.setAttribute('stroke-width', '1');
+                svg.appendChild(circle);
+            }
+            
+            // Draw radar axes and data
+            const angleStep = (2 * Math.PI) / metrics.length;
+            let pathData = '';
+            
+            metrics.forEach((metric, i) => {
+                const angle = i * angleStep - Math.PI / 2;
+                const lineX = centerX + Math.cos(angle) * radius;
+                const lineY = centerY + Math.sin(angle) * radius;
+                
+                // Axis line
+                const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                line.setAttribute('x1', centerX);
+                line.setAttribute('y1', centerY);
+                line.setAttribute('x2', lineX);
+                line.setAttribute('y2', lineY);
+                line.setAttribute('stroke', '#e2e8f0');
+                line.setAttribute('stroke-width', '1');
+                svg.appendChild(line);
+                
+                // Data point
+                const value = Math.min(avgMetrics[i], 1);
+                const pointX = centerX + Math.cos(angle) * radius * value;
+                const pointY = centerY + Math.sin(angle) * radius * value;
+                
+                if (i === 0) pathData = `M ${pointX} ${pointY}`;
+                else pathData += ` L ${pointX} ${pointY}`;
+                
+                // Label
+                const labelX = centerX + Math.cos(angle) * (radius + 20);
+                const labelY = centerY + Math.sin(angle) * (radius + 20);
+                
+                const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                text.setAttribute('x', labelX);
+                text.setAttribute('y', labelY);
+                text.setAttribute('text-anchor', 'middle');
+                text.setAttribute('font-size', '12');
+                text.setAttribute('fill', '#4a5568');
+                text.textContent = metric;
+                svg.appendChild(text);
+            });
+            
+            // Close the path
+            pathData += ' Z';
+            
+            // Draw data polygon
+            const polygon = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            polygon.setAttribute('d', pathData);
+            polygon.setAttribute('fill', 'rgba(102, 126, 234, 0.3)');
+            polygon.setAttribute('stroke', '#667eea');
+            polygon.setAttribute('stroke-width', '2');
+            svg.appendChild(polygon);
+        }
+
+        function createScatterChart() {
+            const svg = document.getElementById('scatterChart');
+            if (!svg) return;
+            
+            svg.innerHTML = '';
+            const width = 380;
+            const height = 260;
+            const margin = { top: 20, right: 20, bottom: 40, left: 40 };
+            const chartWidth = width - margin.left - margin.right;
+            const chartHeight = height - margin.top - margin.bottom;
+            
+            svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+            
+            const chartGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            chartGroup.setAttribute('transform', `translate(${margin.left}, ${margin.top})`);
+            svg.appendChild(chartGroup);
+            
+            const scatterData = allData.slice(0, 50);
+            const maxX = Math.max(...scatterData.map(d => d.highPriorityQueueCount));
+            const maxY = Math.max(...scatterData.map(d => d.adjustmentPercentage));
+            
+            scatterData.forEach(emp => {
+                const cx = (emp.highPriorityQueueCount / maxX) * chartWidth;
+                const cy = chartHeight - (emp.adjustmentPercentage / maxY) * chartHeight;
+                
+                const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                circle.setAttribute('cx', cx);
+                circle.setAttribute('cy', cy);
+                circle.setAttribute('r', 4);
+                circle.setAttribute('fill', '#667eea');
+                circle.setAttribute('class', 'scatter-point');
+                
+                circle.addEventListener('mouseover', function(e) {
+                    showTooltip(e, `${emp.employeeName}<br>Priority: ${emp.highPriorityQueueCount}<br>Adjustment: ${emp.adjustmentPercentage}%`);
+                });
+                circle.addEventListener('mouseout', hideTooltip);
+                
+                chartGroup.appendChild(circle);
+            });
+            
+            addAxes(chartGroup, chartWidth, chartHeight, 'Priority Cases', 'Adjustment %');
+        }
+
+        function createRiskChart() {
+            const svg = document.getElementById('riskChart');
+            if (!svg) return;
+            
+            svg.innerHTML = '';
+            const width = 380;
+            const height = 260;
+            
+            svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+            
+            // Calculate risk scores
+            const riskData = allData.slice(0, 30).map(emp => {
+                const workloadRisk = emp.openCaseCount > 70 ? 3 : emp.openCaseCount > 50 ? 2 : 1;
+                const performanceRisk = emp.percent85Target < 60 ? 3 : emp.percent85Target < 80 ? 2 : 1;
+                const totalRisk = workloadRisk + performanceRisk;
+                
+                return {
+                    name: emp.employeeName,
+                    workloadRisk,
+                    performanceRisk,
+                    totalRisk,
+                    x: Math.random() * (width - 40) + 20,
+                    y: Math.random() * (height - 40) + 20
+                };
+            });
+            
+            riskData.forEach(emp => {
+                const color = emp.totalRisk >= 5 ? '#e53e3e' : emp.totalRisk >= 4 ? '#ed8936' : '#48bb78';
+                const radius = emp.totalRisk * 2 + 3;
+                
+                const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                circle.setAttribute('cx', emp.x);
+                circle.setAttribute('cy', emp.y);
+                circle.setAttribute('r', radius);
+                circle.setAttribute('fill', color);
+                circle.setAttribute('opacity', '0.7');
+                
+                circle.addEventListener('mouseover', function(e) {
+                    showTooltip(e, `${emp.name}<br>Risk Level: ${emp.totalRisk}/6<br>Workload: ${emp.workloadRisk}<br>Performance: ${emp.performanceRisk}`);
+                    this.setAttribute('opacity', '1');
+                });
+                circle.addEventListener('mouseout', function() {
+                    hideTooltip();
+                    this.setAttribute('opacity', '0.7');
+                });
+                
+                svg.appendChild(circle);
+            });
+        }
+
+        function generateInsights() {
+            const panel = document.getElementById('insightsPanel');
+            if (!panel) return;
+            
+            // Calculate key insights
+            const totalEmployees = allData.length;
+            const avgCases = allData.reduce((sum, emp) => sum + emp.openCaseCount, 0) / totalEmployees;
+            const highPerformers = allData.filter(emp => emp.percent85Target > 85).length;
+            const overloaded = allData.filter(emp => emp.openCaseCount > 80).length;
+            const regularEmployees = allData.filter(emp => emp.employeeType === 'R').length;
+            
+            panel.innerHTML = `
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px;">
+                    <div style="background: white; padding: 15px; border-radius: 8px; border-left: 4px solid #48bb78;">
+                        <h4 style="color: #22543d; margin-bottom: 10px;">📊 Performance Overview</h4>
+                        <p>Out of ${totalEmployees} employees, ${highPerformers} (${((highPerformers/totalEmployees)*100).toFixed(1)}%) are high performers with targets above 85%. The average case load is ${avgCases.toFixed(1)} cases per employee.</p>
+                    </div>
+                    
+                    <div style="background: white; padding: 15px; border-radius: 8px; border-left: 4px solid #ed8936;">
+                        <h4 style="color: #c05621; margin-bottom: 10px;">⚠️ Workload Concerns</h4>
+                        <p>${overloaded} employees (${((overloaded/totalEmployees)*100).toFixed(1)}%) are handling over 80 cases, indicating potential overload. Consider workload redistribution for optimal performance.</p>
+                    </div>
+                    
+                    <div style="background: white; padding: 15px; border-radius: 8px; border-left: 4px solid #667eea;">
+                        <h4 style="color: #4c51bf; margin-bottom: 10px;">👥 Workforce Composition</h4>
+                        <p>Regular employees make up ${((regularEmployees/totalEmployees)*100).toFixed(1)}% of the workforce. This distribution affects long-term planning and training strategies.</p>
+                    </div>
+                    
+                    <div style="background: white; padding: 15px; border-radius: 8px; border-left: 4px solid #e53e3e;">
+                        <h4 style="color: #c53030; margin-bottom: 10px;">🎯 Recommendations</h4>
+                        <p>Focus on training for underperforming employees, implement workload balancing strategies, and consider performance incentives for consistent high achievers.</p>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Helper functions for chart creation
+        function addAxes(group, width, height, xLabel, yLabel) {
+            // X axis
+            const xAxis = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            xAxis.setAttribute('x1', 0);
+            xAxis.setAttribute('y1', height);
+            xAxis.setAttribute('x2', width);
+            xAxis.setAttribute('y2', height);
+            xAxis.setAttribute('stroke', '#e2e8f0');
+            xAxis.setAttribute('stroke-width', '2');
+            group.appendChild(xAxis);
+            
+            // Y axis
+            const yAxis = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            yAxis.setAttribute('x1', 0);
+            yAxis.setAttribute('y1', 0);
+            yAxis.setAttribute('x2', 0);
+            yAxis.setAttribute('y2', height);
+            yAxis.setAttribute('stroke', '#e2e8f0');
+            yAxis.setAttribute('stroke-width', '2');
+            group.appendChild(yAxis);
+            
+            // X label
+            const xLabelText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            xLabelText.setAttribute('x', width / 2);
+            xLabelText.setAttribute('y', height + 30);
+            xLabelText.setAttribute('text-anchor', 'middle');
+            xLabelText.setAttribute('font-size', '12');
+            xLabelText.setAttribute('fill', '#718096');
+            xLabelText.textContent = xLabel;
+            group.appendChild(xLabelText);
+            
+            // Y label
+            const yLabelText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            yLabelText.setAttribute('x', -height / 2);
+            yLabelText.setAttribute('y', -30);
+            yLabelText.setAttribute('text-anchor', 'middle');
+            yLabelText.setAttribute('font-size', '12');
+            yLabelText.setAttribute('fill', '#718096');
+            yLabelText.setAttribute('transform', `rotate(-90, -30, ${height / 2})`);
+            yLabelText.textContent = yLabel;
+            group.appendChild(yLabelText);
+        }
+
+        function describeArc(x, y, radius, startAngle, endAngle) {
+            const start = polarToCartesian(x, y, radius, endAngle);
+            const end = polarToCartesian(x, y, radius, startAngle);
+            const largeArcFlag = endAngle - startAngle <= 180 ? "0" : "1";
+            return [
+                "M", start.x, start.y, 
+                "A", radius, radius, 0, largeArcFlag, 0, end.x, end.y
+            ].join(" ");
+        }
+
+        function polarToCartesian(centerX, centerY, radius, angleInDegrees) {
+            const angleInRadians = (angleInDegrees - 90) * Math.PI / 180.0;
+            return {
+                x: centerX + (radius * Math.cos(angleInRadians)),
+                y: centerY + (radius * Math.sin(angleInRadians))
+            };
+        }
+
+        function showTooltip(event, content) {
+            const tooltip = document.getElementById('chartTooltip');
+            if (!tooltip) return;
+            
+            tooltip.innerHTML = content;
+            tooltip.style.left = (event.pageX + 10) + 'px';
+            tooltip.style.top = (event.pageY - 10) + 'px';
+            tooltip.classList.add('show');
+        }
+
+        function hideTooltip() {
+            const tooltip = document.getElementById('chartTooltip');
+            if (tooltip) {
+                tooltip.classList.remove('show');
+            }
+        }
+
+        // Chart update functions for interactive controls
+        function updateBubbleChart(filter) {
+            // Update active button
+            event.target.parentElement.querySelectorAll('.chart-btn').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+            
+            // Filter data based on selection
+            let filteredData = allData;
+            if (filter !== 'all') {
+                filteredData = allData.filter(emp => emp.employeeType === filter);
+            }
+            
+            // Recreate bubble chart with filtered data
+            const svg = document.getElementById('bubbleChart');
+            if (!svg) return;
+            
+            svg.innerHTML = '';
+            const width = 800;
+            const height = 300;
+            const margin = { top: 20, right: 20, bottom: 40, left: 60 };
+            const chartWidth = width - margin.left - margin.right;
+            const chartHeight = height - margin.top - margin.bottom;
+            
+            svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+            
+            // Process filtered data
+            const bubbleData = filteredData.slice(0, 50).map(emp => ({
+                x: emp.openCaseCount,
+                y: emp.percent85Target,
+                r: Math.max(3, Math.sqrt(emp.totalAssignedCases) / 3),
+                name: emp.employeeName,
+                type: emp.employeeType,
+                grade: emp.grade,
+                totalCases: emp.totalAssignedCases
+            }));
+            
+            const maxX = Math.max(...bubbleData.map(d => d.x)) || 100;
+            const maxY = Math.max(...bubbleData.map(d => d.y)) || 100;
+            
+            // Create chart group
+            const chartGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            chartGroup.setAttribute('transform', `translate(${margin.left}, ${margin.top})`);
+            svg.appendChild(chartGroup);
+            
+            // Create bubbles
+            bubbleData.forEach(d => {
+                const cx = (d.x / maxX) * chartWidth;
+                const cy = chartHeight - (d.y / maxY) * chartHeight;
+                
+                // Color by employee type
+                let fillColor = '#48bb78'; // Regular - Green
+                if (d.type === 'C') fillColor = '#ed8936'; // Contract - Orange
+                if (d.type === 'T') fillColor = '#e53e3e'; // Temporary - Red
+                
+                const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                circle.setAttribute('cx', cx);
+                circle.setAttribute('cy', cy);
+                circle.setAttribute('r', d.r);
+                circle.setAttribute('fill', fillColor);
+                circle.setAttribute('opacity', '0.7');
+                circle.setAttribute('stroke', 'white');
+                circle.setAttribute('stroke-width', '2');
+                circle.style.cursor = 'pointer';
+                
+                // Add hover effect
+                circle.addEventListener('mouseover', function(e) {
+                    showTooltip(e, `${d.name}<br>Type: ${d.type === 'R' ? 'Regular' : d.type === 'C' ? 'Contract' : 'Temporary'}<br>Cases: ${d.x}<br>Target: ${d.y}%<br>Total Assigned: ${d.totalCases}`);
+                    this.setAttribute('opacity', '1');
+                    this.setAttribute('stroke-width', '3');
+                });
+                circle.addEventListener('mouseout', function() {
+                    hideTooltip();
+                    this.setAttribute('opacity', '0.7');
+                    this.setAttribute('stroke-width', '2');
+                });
+                
+                chartGroup.appendChild(circle);
+            });
+            
+            // Add axes
+            addAxes(chartGroup, chartWidth, chartHeight, 'Open Cases', 'Target %');
+        }
+
+        function updateRadarChart(type) {
+            // Update active button
+            event.target.parentElement.querySelectorAll('.chart-btn').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+            
+            // Recreate chart with different data
+            createRadarChart();
+        }
+
+        // Initialize everything
+        function initializeData() {
+            allData = generateSampleData(1600);
+            
+            // Initialize all tabs
+            initProgressiveDisclosure();
+            initStickyColumns();
+            initResponsiveColumns();
+            initCardLayout();
+            
+            // Setup responsive column toggles
+            document.querySelectorAll('.column-toggle').forEach(toggle => {
+                toggle.addEventListener('click', function() {
+                    const column = this.dataset.column;
+                    const isActive = this.classList.contains('active');
+                    
+                    // Toggle column visibility
+                    const headers = document.querySelectorAll(`th[data-column="${column}"]`);
+                    const cells = document.querySelectorAll(`td[data-column="${column}"]`);
+                    
+                    if (isActive) {
+                        headers.forEach(h => h.style.display = 'none');
+                        cells.forEach(c => c.style.display = 'none');
+                        this.classList.remove('active');
+                    } else {
+                        headers.forEach(h => h.style.display = '');
+                        cells.forEach(c => c.style.display = '');
+                        this.classList.add('active');
+                    }
+                    
+                    updateHiddenIndicator();
+                });
+            });
+            
+            // Initialize charts
+            createAdvancedCharts();
+        }
+
+        // Event listeners
+        document.addEventListener('DOMContentLoaded', function() {
+            // Initialize data after a short delay to show loading
+            setTimeout(initializeData, 1000);
+            
+            // Search and filter event listeners
+            document.getElementById('progressiveSearch')?.addEventListener('input', () => {
+                currentPages.progressive = 1;
+                initProgressiveDisclosure();
+            });
+            document.getElementById('progressiveTypeFilter')?.addEventListener('change', () => {
+                currentPages.progressive = 1;
+                initProgressiveDisclosure();
+            });
+            
+            document.getElementById('stickySearch')?.addEventListener('input', () => {
+                currentPages.sticky = 1;
+                initStickyColumns();
+            });
+            document.getElementById('stickyGradeFilter')?.addEventListener('change', () => {
+                currentPages.sticky = 1;
+                initStickyColumns();
+            });
+            document.getElementById('stickyEmployeeTypeFilter')?.addEventListener('change', () => {
+                currentPages.sticky = 1;
+                initStickyColumns();
+            });
+            
+            document.getElementById('responsiveSearch')?.addEventListener('input', () => {
+                currentPages.responsive = 1;
+                initResponsiveColumns();
+            });
+            
+            document.getElementById('cardSearch')?.addEventListener('input', () => {
+                currentPages.cards = 1;
+                initCardLayout();
+            });
+            document.getElementById('cardWarningFilter')?.addEventListener('change', () => {
+                currentPages.cards = 1;
+                initCardLayout();
+            });
+        });
+
+        // Tab navigation
+        function showTab(tabId) {
+            // Hide all tabs
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            document.querySelectorAll('.nav-tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Show selected tab
+            document.getElementById(tabId).classList.add('active');
+            event.target.classList.add('active');
+            
+            // Refresh charts when switching to graphs tab
+            if (tabId === 'graphs') {
+                setTimeout(createAdvancedCharts, 100);
+            }
+        }
+    </script>
+</body>
+</html>
