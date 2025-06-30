@@ -41,28 +41,28 @@ ORDER BY r.ROID, r.EXTRDT DESC;
 
 -- =====================================================
 
--- OPTION 2: GEOGRAPHIC DIVERSITY BY ZIPCODE REGIONS
+-- OPTION 2: GEOGRAPHIC DIVERSITY BY ZIPCDE REGIONS
 -- Groups zipcodes into regions and samples from each
 WITH zipcode_regions AS (
-    SELECT ZIPCODE,
+    SELECT ZIPCDE,
            CASE 
-               WHEN ZIPCODE BETWEEN 1000 AND 19999 THEN 'Northeast'
-               WHEN ZIPCODE BETWEEN 20000 AND 39999 THEN 'Southeast' 
-               WHEN ZIPCODE BETWEEN 40000 AND 59999 THEN 'Midwest'
-               WHEN ZIPCODE BETWEEN 60000 AND 79999 THEN 'Central'
-               WHEN ZIPCODE BETWEEN 80000 AND 99999 THEN 'West'
+               WHEN ZIPCDE BETWEEN 1000 AND 19999 THEN 'Northeast'
+               WHEN ZIPCDE BETWEEN 20000 AND 39999 THEN 'Southeast' 
+               WHEN ZIPCDE BETWEEN 40000 AND 59999 THEN 'Midwest'
+               WHEN ZIPCDE BETWEEN 60000 AND 79999 THEN 'Central'
+               WHEN ZIPCDE BETWEEN 80000 AND 99999 THEN 'West'
                ELSE 'Other'
            END as region,
            COUNT(*) as region_count
     FROM ENTITYDEV.TRANTRAIL 
-    WHERE ZIPCODE > 0 AND EXTRDT IS NOT NULL
-    GROUP BY ZIPCODE,
+    WHERE ZIPCDE > 0 AND EXTRDT IS NOT NULL
+    GROUP BY ZIPCDE,
            CASE 
-               WHEN ZIPCODE BETWEEN 1000 AND 19999 THEN 'Northeast'
-               WHEN ZIPCODE BETWEEN 20000 AND 39999 THEN 'Southeast' 
-               WHEN ZIPCODE BETWEEN 40000 AND 59999 THEN 'Midwest'
-               WHEN ZIPCODE BETWEEN 60000 AND 79999 THEN 'Central'
-               WHEN ZIPCODE BETWEEN 80000 AND 99999 THEN 'West'
+               WHEN ZIPCDE BETWEEN 1000 AND 19999 THEN 'Northeast'
+               WHEN ZIPCDE BETWEEN 20000 AND 39999 THEN 'Southeast' 
+               WHEN ZIPCDE BETWEEN 40000 AND 59999 THEN 'Midwest'
+               WHEN ZIPCDE BETWEEN 60000 AND 79999 THEN 'Central'
+               WHEN ZIPCDE BETWEEN 80000 AND 99999 THEN 'West'
                ELSE 'Other'
            END
 ),
@@ -74,7 +74,7 @@ regional_sample AS (
                ORDER BY t.EXTRDT DESC, DBMS_RANDOM.VALUE
            ) as regional_rank
     FROM ENTITYDEV.TRANTRAIL t
-    INNER JOIN zipcode_regions zr ON t.ZIPCODE = zr.ZIPCODE
+    INNER JOIN zipcode_regions zr ON t.ZIPCDE = zr.ZIPCDE
     WHERE t.EXTRDT IS NOT NULL 
       AND t.STATUS IS NOT NULL
       AND zr.region != 'Other'
@@ -87,15 +87,15 @@ ORDER BY region, EXTRDT DESC;
 -- =====================================================
 
 -- OPTION 3: MULTI-DIMENSIONAL DIVERSITY SAMPLING
--- Combines ROID, ZIPCODE regions, and STATUS for maximum diversity
+-- Combines ROID, ZIPCDE regions, and STATUS for maximum diversity
 WITH diversity_matrix AS (
     SELECT ROID,
            CASE 
-               WHEN ZIPCODE BETWEEN 1000 AND 19999 THEN 'NE'
-               WHEN ZIPCODE BETWEEN 20000 AND 39999 THEN 'SE' 
-               WHEN ZIPCODE BETWEEN 40000 AND 59999 THEN 'MW'
-               WHEN ZIPCODE BETWEEN 60000 AND 79999 THEN 'CN'
-               WHEN ZIPCODE BETWEEN 80000 AND 99999 THEN 'WE'
+               WHEN ZIPCDE BETWEEN 1000 AND 19999 THEN 'NE'
+               WHEN ZIPCDE BETWEEN 20000 AND 39999 THEN 'SE' 
+               WHEN ZIPCDE BETWEEN 40000 AND 59999 THEN 'MW'
+               WHEN ZIPCDE BETWEEN 60000 AND 79999 THEN 'CN'
+               WHEN ZIPCDE BETWEEN 80000 AND 99999 THEN 'WE'
                ELSE 'OT'
            END as geo_region,
            STATUS,
@@ -103,14 +103,14 @@ WITH diversity_matrix AS (
     FROM ENTITYDEV.TRANTRAIL 
     WHERE EXTRDT IS NOT NULL 
       AND STATUS IS NOT NULL 
-      AND ZIPCODE > 0
+      AND ZIPCDE > 0
     GROUP BY ROID,
            CASE 
-               WHEN ZIPCODE BETWEEN 1000 AND 19999 THEN 'NE'
-               WHEN ZIPCODE BETWEEN 20000 AND 39999 THEN 'SE' 
-               WHEN ZIPCODE BETWEEN 40000 AND 59999 THEN 'MW'
-               WHEN ZIPCODE BETWEEN 60000 AND 79999 THEN 'CN'
-               WHEN ZIPCODE BETWEEN 80000 AND 99999 THEN 'WE'
+               WHEN ZIPCDE BETWEEN 1000 AND 19999 THEN 'NE'
+               WHEN ZIPCDE BETWEEN 20000 AND 39999 THEN 'SE' 
+               WHEN ZIPCDE BETWEEN 40000 AND 59999 THEN 'MW'
+               WHEN ZIPCDE BETWEEN 60000 AND 79999 THEN 'CN'
+               WHEN ZIPCDE BETWEEN 80000 AND 99999 THEN 'WE'
                ELSE 'OT'
            END,
            STATUS
@@ -127,16 +127,16 @@ diverse_sample AS (
     INNER JOIN diversity_matrix dm ON t.ROID = dm.ROID 
                                    AND t.STATUS = dm.STATUS
                                    AND CASE 
-                                           WHEN t.ZIPCODE BETWEEN 1000 AND 19999 THEN 'NE'
-                                           WHEN t.ZIPCODE BETWEEN 20000 AND 39999 THEN 'SE' 
-                                           WHEN t.ZIPCODE BETWEEN 40000 AND 59999 THEN 'MW'
-                                           WHEN t.ZIPCODE BETWEEN 60000 AND 79999 THEN 'CN'
-                                           WHEN t.ZIPCODE BETWEEN 80000 AND 99999 THEN 'WE'
+                                           WHEN t.ZIPCDE BETWEEN 1000 AND 19999 THEN 'NE'
+                                           WHEN t.ZIPCDE BETWEEN 20000 AND 39999 THEN 'SE' 
+                                           WHEN t.ZIPCDE BETWEEN 40000 AND 59999 THEN 'MW'
+                                           WHEN t.ZIPCDE BETWEEN 60000 AND 79999 THEN 'CN'
+                                           WHEN t.ZIPCDE BETWEEN 80000 AND 99999 THEN 'WE'
                                            ELSE 'OT'
                                        END = dm.geo_region
     WHERE t.EXTRDT IS NOT NULL 
       AND t.STATUS IS NOT NULL
-      AND t.ZIPCODE > 0
+      AND t.ZIPCDE > 0
 )
 SELECT *
 FROM diverse_sample
@@ -147,17 +147,17 @@ FETCH FIRST 400 ROWS ONLY;
 -- =====================================================
 
 -- OPTION 4: TIME-BASED STRATIFIED SAMPLING
--- Ensures temporal diversity across different periods
+-- Ensures temporal diversity across different periods (Fixed Oracle compatibility)
 WITH time_strata AS (
     SELECT 
         EXTRACT(YEAR FROM EXTRDT) as extract_year,
-        EXTRACT(QUARTER FROM EXTRDT) as extract_quarter,
+        CEIL(EXTRACT(MONTH FROM EXTRDT)/3) as extract_quarter,  -- Calculate quarter manually
         ROID,
         COUNT(*) as period_count
     FROM ENTITYDEV.TRANTRAIL 
     WHERE EXTRDT IS NOT NULL 
       AND EXTRDT >= ADD_MONTHS(SYSDATE, -24)  -- Last 2 years
-    GROUP BY EXTRACT(YEAR FROM EXTRDT), EXTRACT(QUARTER FROM EXTRDT), ROID
+    GROUP BY EXTRACT(YEAR FROM EXTRDT), CEIL(EXTRACT(MONTH FROM EXTRDT)/3), ROID
     HAVING COUNT(*) >= 2
 ),
 temporal_sample AS (
@@ -171,7 +171,7 @@ temporal_sample AS (
     FROM ENTITYDEV.TRANTRAIL t
     INNER JOIN time_strata ts ON t.ROID = ts.ROID 
                               AND EXTRACT(YEAR FROM t.EXTRDT) = ts.extract_year
-                              AND EXTRACT(QUARTER FROM t.EXTRDT) = ts.extract_quarter
+                              AND CEIL(EXTRACT(MONTH FROM t.EXTRDT)/3) = ts.extract_quarter
     WHERE t.EXTRDT IS NOT NULL 
       AND t.STATUS IS NOT NULL
 )
@@ -221,7 +221,7 @@ FROM your_selected_sample
 UNION ALL
 SELECT 
     'Geographic Distribution',
-    COUNT(DISTINCT ZIPCODE),
+    COUNT(DISTINCT ZIPCDE),
     COUNT(*)
 FROM your_selected_sample
 UNION ALL  
