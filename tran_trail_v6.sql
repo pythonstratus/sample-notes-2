@@ -3,43 +3,41 @@
 -- Purpose: Extract 300-400 records from different Areas/Orgs
 -- =====================================================
 
--- OPTION 1: STRATIFIED SAMPLING BY ROID (Primary Approach) - FIXED
--- This ensures representation across different Regional Offices
-WITH org_counts AS (
-    SELECT ROID, COUNT(*) as total_records
-    FROM ENTITYDEV.TRANTRAIL 
-    WHERE EXTRDT IS NOT NULL 
-      AND STATUS IS NOT NULL
-      AND ROID IS NOT NULL
-    GROUP BY ROID
-    HAVING COUNT(*) > 5  -- Only include orgs with meaningful data
-),
-sample_per_org AS (
-    SELECT ROID, 
-           CASE 
-               WHEN total_records >= 50 THEN 20  -- Large orgs: 20 records each
-               WHEN total_records >= 20 THEN 15  -- Medium orgs: 15 records each  
-               ELSE 10                           -- Small orgs: 10 records each
-           END as sample_size
-    FROM org_counts
-),
-ranked_records AS (
-    SELECT t.*, 
+-- OPTION 1: STRATIFIED SAMPLING BY ROID (COMPLETELY REWRITTEN)
+-- Simple approach to avoid ZIP concatenation issues
+SELECT * FROM (
+    SELECT t.*,
            ROW_NUMBER() OVER (
                PARTITION BY t.ROID 
                ORDER BY t.EXTRDT DESC, t.INITDT DESC, DBMS_RANDOM.VALUE
-           ) as rn
+           ) as org_rank
     FROM ENTITYDEV.TRANTRAIL t
-    INNER JOIN sample_per_org s ON t.ROID = s.ROID
     WHERE t.EXTRDT IS NOT NULL 
       AND t.STATUS IS NOT NULL
       AND t.ROID IS NOT NULL
-)
-SELECT *
-FROM ranked_records r
-INNER JOIN sample_per_org s ON r.ROID = s.ROID
-WHERE r.rn <= s.sample_size
-ORDER BY r.ROID, r.EXTRDT DESC;
+      AND t.ROID IN (
+          -- Only include orgs with sufficient data
+          SELECT ROID 
+          FROM ENTITYDEV.TRANTRAIL 
+          WHERE EXTRDT IS NOT NULL AND STATUS IS NOT NULL
+          GROUP BY ROID 
+          HAVING COUNT(*) > 5
+      )
+) ranked_data
+WHERE org_rank <= CASE 
+    WHEN ROID IN (
+        SELECT ROID FROM ENTITYDEV.TRANTRAIL 
+        WHERE EXTRDT IS NOT NULL AND STATUS IS NOT NULL
+        GROUP BY ROID HAVING COUNT(*) >= 50
+    ) THEN 20  -- Large orgs: 20 records
+    WHEN ROID IN (
+        SELECT ROID FROM ENTITYDEV.TRANTRAIL 
+        WHERE EXTRDT IS NOT NULL AND STATUS IS NOT NULL
+        GROUP BY ROID HAVING COUNT(*) >= 20
+    ) THEN 15  -- Medium orgs: 15 records
+    ELSE 10    -- Small orgs: 10 records
+END
+ORDER BY ROID, EXTRDT DESC;
 
 -- =====================================================
 
@@ -187,15 +185,14 @@ FETCH FIRST 350 ROWS ONLY;
 
 -- =====================================================
 
--- OPTION 5: BUSINESS VALIDATION FOCUSED QUERY
--- Prioritizes records with complete data for validation
-SELECT *
-FROM (
+-- OPTION 5: BUSINESS VALIDATION FOCUSED QUERY (COMPLETELY REWRITTEN)
+-- Prioritizes records with complete data for validation - No complex CTEs
+SELECT * FROM (
     SELECT t.*,
            ROW_NUMBER() OVER (
                PARTITION BY t.ROID 
                ORDER BY 
-                   CASE WHEN t.CLOSEDT IS NOT NULL THEN 1 ELSE 2 END,  -- Completed records first
+                   CASE WHEN t.CLOSEDT IS NOT NULL THEN 1 ELSE 2 END,  -- Completed first
                    t.HRS DESC,                                          -- Higher activity first
                    t.TOUCH DESC,                                        -- More interactions first
                    t.EXTRDT DESC                                        -- Recent first
@@ -205,11 +202,13 @@ FROM (
       AND t.STATUS IS NOT NULL
       AND t.ROID IS NOT NULL
       AND t.TINSID IS NOT NULL
-      AND t.HRS > 0                    -- Must have actual work hours
-      AND t.NAICSCD IS NOT NULL        -- Must have industry classification
+      AND t.HRS > 0                         -- Must have actual work hours
+      AND t.NAICSCD IS NOT NULL             -- Must have industry classification
       AND (t.EMPTOUCH > 0 OR t.EMPHRS > 0)  -- Must have employee involvement
-) ranked_validation
-WHERE validation_rank <= 25  -- 25 records per organization
+      AND LENGTH(TRIM(t.STATUS)) > 0        -- Valid status
+      AND LENGTH(TRIM(t.NAICSCD)) > 0       -- Valid NAICS code
+) validation_data
+WHERE validation_rank <= 25  -- 25 high-quality records per organization
 ORDER BY ROID, validation_rank
 FETCH FIRST 400 ROWS ONLY;
 
