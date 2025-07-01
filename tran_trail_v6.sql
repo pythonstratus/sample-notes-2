@@ -3,13 +3,14 @@
 -- Purpose: Extract 300-400 records from different Areas/Orgs
 -- =====================================================
 
--- OPTION 1: STRATIFIED SAMPLING BY ROID (Primary Approach)
+-- OPTION 1: STRATIFIED SAMPLING BY ROID (Primary Approach) - FIXED
 -- This ensures representation across different Regional Offices
 WITH org_counts AS (
     SELECT ROID, COUNT(*) as total_records
     FROM ENTITYDEV.TRANTRAIL 
     WHERE EXTRDT IS NOT NULL 
       AND STATUS IS NOT NULL
+      AND ROID IS NOT NULL
     GROUP BY ROID
     HAVING COUNT(*) > 5  -- Only include orgs with meaningful data
 ),
@@ -32,6 +33,7 @@ ranked_records AS (
     INNER JOIN sample_per_org s ON t.ROID = s.ROID
     WHERE t.EXTRDT IS NOT NULL 
       AND t.STATUS IS NOT NULL
+      AND t.ROID IS NOT NULL
 )
 SELECT *
 FROM ranked_records r
@@ -86,9 +88,17 @@ ORDER BY region, EXTRDT DESC;
 
 -- =====================================================
 
--- OPTION 3: MULTI-DIMENSIONAL DIVERSITY SAMPLING
+-- OPTION 3: MULTI-DIMENSIONAL DIVERSITY SAMPLING (FIXED)
 -- Combines ROID, ZIPCDE regions, and STATUS for maximum diversity
-WITH diversity_matrix AS (
+WITH valid_zipcodes AS (
+    -- First, clean and validate ZIP codes
+    SELECT *
+    FROM ENTITYDEV.TRANTRAIL 
+    WHERE ZIPCDE BETWEEN 1000 AND 99999  -- Valid US ZIP range only
+      AND EXTRDT IS NOT NULL 
+      AND STATUS IS NOT NULL
+),
+diversity_matrix AS (
     SELECT ROID,
            CASE 
                WHEN ZIPCDE BETWEEN 1000 AND 19999 THEN 'NE'
@@ -100,10 +110,7 @@ WITH diversity_matrix AS (
            END as geo_region,
            STATUS,
            COUNT(*) as combination_count
-    FROM ENTITYDEV.TRANTRAIL 
-    WHERE EXTRDT IS NOT NULL 
-      AND STATUS IS NOT NULL 
-      AND ZIPCDE > 0
+    FROM valid_zipcodes
     GROUP BY ROID,
            CASE 
                WHEN ZIPCDE BETWEEN 1000 AND 19999 THEN 'NE'
@@ -123,7 +130,7 @@ diverse_sample AS (
                PARTITION BY t.ROID, dm.geo_region, t.STATUS 
                ORDER BY t.EXTRDT DESC, t.LSTTOUCH DESC, DBMS_RANDOM.VALUE
            ) as diversity_rank
-    FROM ENTITYDEV.TRANTRAIL t
+    FROM valid_zipcodes t
     INNER JOIN diversity_matrix dm ON t.ROID = dm.ROID 
                                    AND t.STATUS = dm.STATUS
                                    AND CASE 
@@ -134,9 +141,6 @@ diverse_sample AS (
                                            WHEN t.ZIPCDE BETWEEN 80000 AND 99999 THEN 'WE'
                                            ELSE 'OT'
                                        END = dm.geo_region
-    WHERE t.EXTRDT IS NOT NULL 
-      AND t.STATUS IS NOT NULL
-      AND t.ZIPCDE > 0
 )
 SELECT *
 FROM diverse_sample
