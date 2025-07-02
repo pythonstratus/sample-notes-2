@@ -230,8 +230,7 @@ EXCEPTION
 END SP_CK_TIN_SINGLE;
 /
 
--- Example usage for the multi-cursor version:
-/*
+-- TEST SCRIPT 1: Simple test to verify procedure execution
 DECLARE
     cur_ent SYS_REFCURSOR;
     cur_trantrail SYS_REFCURSOR;
@@ -241,8 +240,13 @@ DECLARE
     v_status VARCHAR2(20);
     v_message VARCHAR2(500);
 BEGIN
+    -- Enable DBMS_OUTPUT to see messages
+    DBMS_OUTPUT.ENABLE(1000000);
+    
+    DBMS_OUTPUT.PUT_LINE('=== Testing SP_CK_TIN Procedure ===');
+    
     SP_CK_TIN(
-        p_tin => '123456789',
+        p_tin => '844607599',  -- Using the TIN from your screenshot
         cur_ent => cur_ent,
         cur_trantrail => cur_trantrail,
         cur_entmod => cur_entmod,
@@ -254,12 +258,132 @@ BEGIN
     
     DBMS_OUTPUT.PUT_LINE('Status: ' || v_status);
     DBMS_OUTPUT.PUT_LINE('Message: ' || v_message);
+    DBMS_OUTPUT.PUT_LINE('Procedure executed successfully. Cursors are ready.');
+    DBMS_OUTPUT.PUT_LINE('Note: Cursor data needs to be fetched by the calling application.');
     
-    -- Process each cursor as needed
-    -- Note: You would typically fetch from these cursors in your calling application
+    -- Close cursors
+    IF cur_ent%ISOPEN THEN CLOSE cur_ent; END IF;
+    IF cur_trantrail%ISOPEN THEN CLOSE cur_trantrail; END IF;
+    IF cur_entmod%ISOPEN THEN CLOSE cur_entmod; END IF;
+    IF cur_entact%ISOPEN THEN CLOSE cur_entact; END IF;
+    IF cur_timetin%ISOPEN THEN CLOSE cur_timetin; END IF;
+    
+EXCEPTION
+    WHEN OTHERS THEN
+        DBMS_OUTPUT.PUT_LINE('Error occurred: ' || SQLERRM);
 END;
 /
-*/
+
+-- TEST SCRIPT 2: Test with data output (fetching from cursors)
+DECLARE
+    cur_ent SYS_REFCURSOR;
+    cur_trantrail SYS_REFCURSOR;
+    cur_entmod SYS_REFCURSOR;
+    cur_entact SYS_REFCURSOR;
+    cur_timetin SYS_REFCURSOR;
+    v_status VARCHAR2(20);
+    v_message VARCHAR2(500);
+    
+    -- Variables for ENT cursor
+    v_tin VARCHAR2(20);
+    v_tinsid NUMBER;
+    v_tpctrl VARCHAR2(50);
+    v_totassd NUMBER;
+    v_ent_status VARCHAR2(10);
+    v_caseind VARCHAR2(10);
+    v_pyrind VARCHAR2(10);
+    v_casecode VARCHAR2(10);
+    v_subcode VARCHAR2(10);
+    v_assncft VARCHAR2(10);
+    v_assngrp VARCHAR2(10);
+    v_risk VARCHAR2(10);
+    v_arisk VARCHAR2(10);
+    v_extrdt DATE;
+    
+    v_count NUMBER := 0;
+    
+BEGIN
+    DBMS_OUTPUT.ENABLE(1000000);
+    
+    DBMS_OUTPUT.PUT_LINE('=== Testing SP_CK_TIN with Data Output ===');
+    
+    SP_CK_TIN(
+        p_tin => '844607599',
+        cur_ent => cur_ent,
+        cur_trantrail => cur_trantrail,
+        cur_entmod => cur_entmod,
+        cur_entact => cur_entact,
+        cur_timetin => cur_timetin,
+        p_status => v_status,
+        p_message => v_message
+    );
+    
+    DBMS_OUTPUT.PUT_LINE('Status: ' || v_status);
+    DBMS_OUTPUT.PUT_LINE('Message: ' || v_message);
+    DBMS_OUTPUT.PUT_LINE('');
+    
+    -- Fetch and display ENT data
+    DBMS_OUTPUT.PUT_LINE('=== ENT TABLE DATA ===');
+    LOOP
+        FETCH cur_ent INTO v_tin, v_tinsid, v_tpctrl, v_totassd, v_ent_status,
+                          v_caseind, v_pyrind, v_casecode, v_subcode, v_assncft,
+                          v_assngrp, v_risk, v_arisk, v_extrdt;
+        EXIT WHEN cur_ent%NOTFOUND;
+        
+        v_count := v_count + 1;
+        DBMS_OUTPUT.PUT_LINE('Row ' || v_count || ': TIN=' || v_tin || 
+                           ', TINSID=' || v_tinsid || 
+                           ', STATUS=' || v_ent_status);
+    END LOOP;
+    
+    IF v_count = 0 THEN
+        DBMS_OUTPUT.PUT_LINE('No data found in ENT table for this TIN');
+    END IF;
+    
+    -- Close cursors
+    CLOSE cur_ent;
+    CLOSE cur_trantrail;
+    CLOSE cur_entmod;
+    CLOSE cur_entact;
+    CLOSE cur_timetin;
+    
+EXCEPTION
+    WHEN OTHERS THEN
+        DBMS_OUTPUT.PUT_LINE('Error occurred: ' || SQLERRM);
+        -- Close cursors if open
+        IF cur_ent%ISOPEN THEN CLOSE cur_ent; END IF;
+        IF cur_trantrail%ISOPEN THEN CLOSE cur_trantrail; END IF;
+        IF cur_entmod%ISOPEN THEN CLOSE cur_entmod; END IF;
+        IF cur_entact%ISOPEN THEN CLOSE cur_entact; END IF;
+        IF cur_timetin%ISOPEN THEN CLOSE cur_timetin; END IF;
+END;
+/
+
+-- TEST SCRIPT 3: Simple validation test
+BEGIN
+    DBMS_OUTPUT.ENABLE(1000000);
+    DBMS_OUTPUT.PUT_LINE('=== Checking if procedure exists ===');
+    
+    FOR rec IN (SELECT object_name, object_type, status 
+                FROM user_objects 
+                WHERE object_name = 'SP_CK_TIN') 
+    LOOP
+        DBMS_OUTPUT.PUT_LINE('Found: ' || rec.object_name || 
+                           ' (' || rec.object_type || ') - Status: ' || rec.status);
+    END LOOP;
+    
+    DBMS_OUTPUT.PUT_LINE('=== Checking table access ===');
+    
+    FOR rec IN (SELECT COUNT(*) as cnt FROM ent WHERE rownum <= 1)
+    LOOP
+        DBMS_OUTPUT.PUT_LINE('ENT table accessible - sample count: ' || rec.cnt);
+    END LOOP;
+    
+EXCEPTION
+    WHEN OTHERS THEN
+        DBMS_OUTPUT.PUT_LINE('Error: ' || SQLERRM);
+END;
+/
 
 -- Example usage for the single cursor version:
 /*
