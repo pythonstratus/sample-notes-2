@@ -333,3 +333,37 @@ BEGIN
     SP_CK_TIN_COMPLETE('844607599');
 END;
 /
+
+
+
+Here's a brief email for Brian:
+
+---
+
+**Subject:** TIN Data Validation - Stored Procedure Complete
+
+Hi Brian,
+
+We've successfully created a stored procedure to validate TIN data between our Legacy and new ETL processes. 
+
+**Results:** The data matched one-to-one across all tables (ENT, TRANTRAIL, ENTMOD, ENTACT, TIMETIN), confirming our ETL migration accuracy.
+
+**Deliverable:** Attached is the Oracle stored procedure `SP_CK_TIN_COMPLETE` that users can run themselves for TIN validation. The procedure replicates the exact output format of the original cK_tin.sql script.
+
+**Usage:** 
+```sql
+BEGIN
+    DBMS_OUTPUT.ENABLE(1000000);
+    SP_CK_TIN_COMPLETE('TIN_NUMBER');
+END;
+/
+```
+
+This provides a self-service validation tool for the team to verify data integrity post-migration.
+
+Best regards,
+[Your Name]
+
+---
+
+Feel free to adjust the tone or add any specific details about your testing process!
