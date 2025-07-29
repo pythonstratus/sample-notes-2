@@ -10,6 +10,23 @@
 -- STEP 1: CREATE OBJECT TYPES
 -- ============================================================================
 
+-- Simple hash function that doesn't require DBMS_CRYPTO
+CREATE OR REPLACE FUNCTION FN_GENERATE_SIMPLE_HASH(p_data VARCHAR2)
+RETURN VARCHAR2 AS
+    v_hash VARCHAR2(32);
+BEGIN
+    -- Simple hash using built-in functions (no special grants needed)
+    SELECT SUBSTR(RAWTOHEX(UTL_RAW.CAST_TO_RAW(p_data || TO_CHAR(SYSDATE, 'YYYYMMDDHH24MISS'))), 1, 32)
+    INTO v_hash FROM DUAL;
+    
+    RETURN v_hash;
+EXCEPTION
+    WHEN OTHERS THEN
+        -- Fallback to simple checksum
+        RETURN TO_CHAR(ABS(DBMS_UTILITY.GET_HASH_VALUE(p_data, 1, 999999999)));
+END FN_GENERATE_SIMPLE_HASH;
+/
+
 -- Universal data structure for normalized comparison
 CREATE OR REPLACE TYPE t_tin_section_data AS OBJECT (
     source_schema VARCHAR2(20),
