@@ -130,3 +130,6 @@ END IF;
 The issue is that Oracle can't automatically convert the cursor record to the object type. You need to explicitly construct the object type with all its attributes.
 
 Try the first approach - explicitly constructing the objects - that should resolve all the PLS-00382 errors.
+
+
+mvn install:install-file -Dfile=ojdbc10.jar -DgroupId=com.oracle.database.jdbc -DartifactId=ojdbc10 -Dversion=19.3.0.0 -Dpackaging=jar
