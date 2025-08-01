@@ -295,3 +295,25 @@ This is a classic example of how **mathematical rigor** (complete ordering) prev
 
 
 "As VP of Data Science and Analytics at Diaconia, I bring extensive experience in leveraging advanced algorithms for data discovery and insights generation. I'm excited to take on the Data Architect role for this IRS project, where I'll apply my expertise in guiding teams to implement cutting-edge analytical techniques and computational methodologies. My focus is on translating complex data challenges into actionable solutions through strategic application of data science processes and algorithmic approaches."
+
+
+CBO stands for **Cost-Based Optimizer** - it's Oracle's query optimizer that determines the most efficient execution plan for SQL statements.
+
+In the Mermaid diagram context:
+
+- **M7 - "Standard CBO":** Traditional Cost-Based Optimizer behavior using standard Oracle algorithms
+- **Exadata - "Enhanced CBO":** Cost-Based Optimizer enhanced with Exadata-specific optimizations and features
+
+The CBO analyzes factors like:
+- Table statistics
+- Index availability  
+- Data distribution
+- Hardware capabilities
+- Join methods
+- Access paths
+
+**Why this matters for your issue:**
+- **M7's CBO** makes consistent execution plan choices leading to predictable (but non-deterministic) results
+- **Exadata's CBO** has additional optimization features (smart scans, storage indexes, cell processing) that can lead to different execution plans and thus different row retrieval orders
+
+The enhanced CBO on Exadata is actually working correctly by exposing the non-deterministic nature of your ORDER BY clause, while M7's standard CBO was masking the issue through consistent execution patterns.
