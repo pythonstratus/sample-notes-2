@@ -1,73 +1,41 @@
-Hi Jyoti,
-I've reviewed the SQL query for the Time View that you shared. After analyzing the code, I understand the issue you're facing - one of the subqueries is returning approximately 3 million records, causing the endpoint to hang indefinitely.
-Based on your note suggesting that we should consider using CASE statements instead of UNIONs, I believe this is indeed the right approach. Here are my detailed recommendations:
-Main Issue
-The query structure with multiple UNION ALLs is likely creating large intermediate result sets, particularly the query you mentioned that returns 3M records. This is causing performance degradation in the Time View endpoint.
-Recommended Optimizations
+{
+  `body`: `Hi Team,
 
-Replace UNIONs with CASE Statements
-Instead of selecting from the same tables multiple times and combining with UNION ALL, we can use CASE expressions to conditionally select values in a single query. This should significantly reduce the query overhead by avoiding large intermediate results.
-Optimize the Latest Month Calculation
-The latest_month CTE is referenced repeatedly throughout the query. We can optimize this and ensure it's only calculated once.
-Add Additional Filters
-If possible, consider adding more restrictive filters to reduce the dataset size before processing.
-Review and Optimize Indexes
-Ensure appropriate indexes exist on commonly joined and filtered columns:
+I appreciate the discussion around Oracle synonyms and understand the perspective shared. While I recognize the potential benefits of eliminating synonyms during our modernization effort, I'd like to propose a more measured approach given our current context.
 
-t.roid, a.roid (join columns)
-t.active, t.timedef (filter columns)
-t.code, t.timecode (filter columns)
-rptenddt in the eom table
+**Current State & Risk Assessment:**
+- We're successfully meeting our ETL performance expectations and timelines
+- Our mission-critical financial data requires maximum stability during modernization
+- The Spring Boot and batch processing implementation is progressing well
 
+**Recommended Strategy:**
 
-Simplify Existence Checks
-The EXISTS subqueries could potentially be rewritten as JOINs for better performance.
+Rather than making immediate changes to synonyms, I suggest we implement a phased approach:
 
-Implementation Suggestion
-I've started drafting a refactored version of the query using the CASE approach. Here's a simplified example of how we can structure it:
-sqlWITH latest_month AS (
-    SELECT rptmnth 
-    FROM eom
-    WHERE rptenddt = (SELECT MAX(rptenddt) FROM eom)
-)
-SELECT DISTINCT 
-    t.rptdt,
-    t.roid,
-    CASE 
-        WHEN t.active IN ('Y','C') AND t.timedef = 'D' AND t.code NOT IN ('106','107',...) THEN a.type
-        WHEN t.active IN ('Y','C') AND t.timedef = 'D' AND t.code IN ('106','107',...) THEN a.type
-        WHEN t.active IN ('Y','C') AND t.timedef <> 'D' THEN a.type
-        WHEN t.subcode > '500' THEN '000'
-        WHEN t.timecode = '770' THEN '613'
-        ELSE NULL
-    END AS type,
-    CASE
-        -- Similar conditional logic for timecode
-    END AS timecode,
-    CASE
-        -- Similar conditional logic for cdname
-    END AS cdname,
-    TO_NUMBER(t.hours) AS hours,
-    CASE
-        -- Similar conditional logic for other columns
-    END AS ctrsdef,
-    -- Other columns with CASE statements as needed
-FROM 
-    timetin t
-LEFT JOIN 
-    archiveinv a ON t.roid = a.roid
-LEFT JOIN 
-    entcode e ON (t.subcode = e.code OR t.timecode = e.code)
-LEFT JOIN 
-    entmod m ON t.roid = m.roid AND t.timesid = m.emodsid
-CROSS JOIN
-    latest_month lm
-WHERE
-    (
-        (t.active IN ('Y','C') AND a.month = lm.rptmnth)
-        OR (e.active IN ('Y','C') AND a.month = lm.rptmnth)
-    )
-    -- Add other necessary filter conditions
-I'm happy to work with you on implementing and testing the complete solution. Would you like me to develop a fully refactored version of the query based on the complete code you shared?
-Let me know if you need any clarification or have additional information about the business requirements that might affect the optimization approach.
-Best regards,
+1. **Discovery & Documentation Phase**
+   - Conduct comprehensive audit of existing synonym usage across all systems
+   - Interview stakeholders to understand business dependencies
+   - Map synonym chains and identify critical data flows
+
+2. **Risk Assessment & Planning**
+   - Analyze impact on current ETL processes
+   - Identify low-risk synonyms for initial elimination
+   - Develop rollback strategies for each change
+
+3. **Gradual Implementation**
+   - Start with non-critical synonyms in development environments
+   - Implement changes during planned maintenance windows
+   - Monitor performance impacts before proceeding
+
+**Rationale:**
+Given that we're handling mission-critical financial data and currently meeting our performance targets, introducing synonym changes without proper analysis could introduce unnecessary risk to our modernization timeline and system stability.
+
+I recommend we schedule a follow-up discussion with Samuel and the team to present this phased approach, ensuring we maintain our current momentum while planning for systematic improvements.
+
+Thoughts on this approach?
+
+Best regards`,
+  `kind`: `email`,
+  `subject`: `Recommendation: Phased Approach for Oracle Synonym Modernization`,
+  `summaryTitle`: `Recommendation for Synonym Modernization Strategy`
+}
