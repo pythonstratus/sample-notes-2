@@ -1,0 +1,85 @@
+Looking at your screenshot, I can see the issue with dark mode compatibility. The interface appears to have a light gray/white background with dark text, which would create poor contrast and readability issues when Windows is in dark mode.
+
+## Technical Solutions to Fix Dark Mode Compatibility:
+
+### 1. **CSS Media Query Approach**
+```css
+/* Light mode (default) */
+.extract-system-status {
+  background-color: #ffffff;
+  color: #333333;
+}
+
+/* Dark mode */
+@media (prefers-color-scheme: dark) {
+  .extract-system-status {
+    background-color: #1a1a1a;
+    color: #ffffff;
+  }
+  
+  .status-table {
+    background-color: #2d2d2d;
+    border-color: #404040;
+  }
+  
+  .table-row:nth-child(even) {
+    background-color: #252525;
+  }
+}
+```
+
+### 2. **React Component with Theme Context**
+```jsx
+// Create a theme context
+const ThemeContext = createContext();
+
+// Theme provider component
+const ThemeProvider = ({ children }) => {
+  const [isDarkMode, setIsDarkMode] = useState(
+    window.matchMedia('(prefers-color-scheme: dark)').matches
+  );
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const handleChange = (e) => setIsDarkMode(e.matches);
+    
+    mediaQuery.addEventListener('change', handleChange);
+    return () => mediaQuery.removeEventListener('change', handleChange);
+  }, []);
+
+  return (
+    <ThemeContext.Provider value={{ isDarkMode }}>
+      {children}
+    </ThemeContext.Provider>
+  );
+};
+```
+
+### 3. **CSS Custom Properties (Recommended)**
+```css
+:root {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f5f5f5;
+  --text-primary: #333333;
+  --border-color: #dddddd;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg-primary: #1a1a1a;
+    --bg-secondary: #2d2d2d;
+    --text-primary: #ffffff;
+    --border-color: #404040;
+  }
+}
+
+.extract-system-status {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  border-color: var(--border-color);
+}
+```
+
+---
+
+## Client Communication Template:The key is to implement proper CSS media queries that respond to `prefers-color-scheme: dark` and ensure all your components have appropriate dark theme variants. The CSS custom properties approach is most maintainable as it allows you to define your color scheme in one place and apply it consistently across your application.
