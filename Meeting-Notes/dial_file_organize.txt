@@ -54,22 +54,23 @@ for file in *; do
         
         echo "Processing: $file -> Type: $file_type, Number: $number"
         
-        # Create the numbered directory in OUTPUT_DIR if it doesn't exist
-        if [ ! -d "$OUTPUT_DIR/$number" ]; then
-            mkdir -p "$OUTPUT_DIR/$number"
-            echo "  Created directory: $OUTPUT_DIR/$number"
+        # Create the numbered directory and DIALDIR subdirectory in OUTPUT_DIR if it doesn't exist
+        dialdir_path="$OUTPUT_DIR/$number/DIALDIR"
+        if [ ! -d "$dialdir_path" ]; then
+            mkdir -p "$dialdir_path"
+            echo "  Created directory: $dialdir_path"
         fi
         
-        # Copy and rename the file directly to OUTPUT_DIR
+        # Copy and rename the file directly to OUTPUT_DIR/number/DIALDIR
         new_filename="${file_type}.raw"
         
-        if [ -f "$OUTPUT_DIR/$number/$new_filename" ]; then
-            echo "  Warning: $OUTPUT_DIR/$number/$new_filename already exists, creating timestamped version"
-            cp "$file" "$OUTPUT_DIR/$number/${new_filename}.${TIMESTAMP}"
-            echo "  Copied: $file -> $OUTPUT_DIR/$number/${new_filename}.${TIMESTAMP} (original preserved)"
+        if [ -f "$dialdir_path/$new_filename" ]; then
+            echo "  Warning: $dialdir_path/$new_filename already exists, creating timestamped version"
+            cp "$file" "$dialdir_path/${new_filename}.${TIMESTAMP}"
+            echo "  Copied: $file -> $dialdir_path/${new_filename}.${TIMESTAMP} (original preserved)"
         else
-            cp "$file" "$OUTPUT_DIR/$number/$new_filename"
-            echo "  Copied: $file -> $OUTPUT_DIR/$number/$new_filename (original preserved)"
+            cp "$file" "$dialdir_path/$new_filename"
+            echo "  Copied: $file -> $dialdir_path/$new_filename (original preserved)"
         fi
         
     else
