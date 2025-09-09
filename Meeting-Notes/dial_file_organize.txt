@@ -59,13 +59,25 @@ done
 echo "----------------------------------------"
 echo "File organization complete!"
 echo ""
-echo "Directory structure created:"
-for dir in */; do
-    if [[ $dir =~ ^[0-9]+/$ ]]; then
-        echo "  $dir"
-        ls -la "$dir" | grep -E "\.(raw|backup)$" | awk '{print "    " $9 " (" $5 " bytes)"}'
+echo "Summary:"
+echo "- Source files preserved in: $INPUT_DIR"
+echo "- Organized files copied to: $OUTPUT_DIR"
+echo "- Backups stored in: $BACKUP_DIR"
+echo "- Run timestamp: $TIMESTAMP"
+echo ""
+echo "Final directory structure in $OUTPUT_DIR:"
+for dir in "$OUTPUT_DIR"/*/; do
+    if [[ -d "$dir" ]] && [[ $(basename "$dir") =~ ^[0-9]+$ ]]; then
+        echo "  $(basename "$dir")/"
+        ls -la "$dir" | grep -E "\.(raw|backup|[0-9]{8}_[0-9]{6})$" | awk '{print "    " $9 " (" $5 " bytes)"}'
     fi
 done
+
+echo ""
+echo "Backup folders created this run:"
+if [ -d "$BACKUP_DIR" ]; then
+    ls -la "$BACKUP_DIR" | grep "_${TIMESTAMP}$" | awk '{print "  " $9}'
+fi
 
 echo ""
 echo "Files that were not processed:"
