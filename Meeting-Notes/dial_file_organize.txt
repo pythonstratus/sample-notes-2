@@ -90,7 +90,10 @@ echo "Final directory structure in $OUTPUT_DIR:"
 for dir in "$OUTPUT_DIR"/*/; do
     if [[ -d "$dir" ]] && [[ $(basename "$dir") =~ ^[0-9]+$ ]]; then
         echo "  $(basename "$dir")/"
-        ls -la "$dir" | grep -E "\.(raw|backup|[0-9]{8}_[0-9]{6})$" | awk '{print "    " $9 " (" $5 " bytes)"}'
+        if [[ -d "$dir/DIALDIR" ]]; then
+            echo "    DIALDIR/"
+            ls -la "$dir/DIALDIR" | grep -E "\.(raw|backup|[0-9]{8}_[0-9]{6})$" | awk '{print "      " $9 " (" $5 " bytes)"}'
+        fi
     fi
 done
 
