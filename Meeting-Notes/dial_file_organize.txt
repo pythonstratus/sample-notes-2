@@ -1,8 +1,14 @@
 #!/bin/bash
 
-# Script to organize tda and tdi files into numbered folders
+# Script to organize tda and tdi files into numbered folders (Weekly run)
 # Input directory containing the files
 INPUT_DIR="/eftu/entity/incoming"
+# Output directory where organized folders will be moved
+OUTPUT_DIR="/eftu/dial"
+# Backup directory for existing folders
+BACKUP_DIR="/eftu/dial/backups"
+# Timestamp for this run
+TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 
 # Check if input directory exists
 if [ ! -d "$INPUT_DIR" ]; then
@@ -10,10 +16,24 @@ if [ ! -d "$INPUT_DIR" ]; then
     exit 1
 fi
 
+# Check if output directory exists, create if it doesn't
+if [ ! -d "$OUTPUT_DIR" ]; then
+    echo "Creating output directory: $OUTPUT_DIR"
+    mkdir -p "$OUTPUT_DIR"
+fi
+
+# Create backup directory if it doesn't exist
+if [ ! -d "$BACKUP_DIR" ]; then
+    echo "Creating backup directory: $BACKUP_DIR"
+    mkdir -p "$BACKUP_DIR"
+fi
+
 # Change to the input directory
 cd "$INPUT_DIR" || exit 1
 
 echo "Starting file organization in $INPUT_DIR"
+echo "Timestamp: $TIMESTAMP"
+echo "Output directory: $OUTPUT_DIR"
 echo "----------------------------------------"
 
 # Process all tdi and tda files (case insensitive), excluding .tar files
@@ -34,22 +54,23 @@ for file in *; do
         
         echo "Processing: $file -> Type: $file_type, Number: $number"
         
-        # Create the numbered directory if it doesn't exist
-        if [ ! -d "$number" ]; then
-            mkdir -p "$number"
-            echo "  Created directory: $number"
+        # Create the numbered directory in OUTPUT_DIR if it doesn't exist
+        if [ ! -d "$OUTPUT_DIR/$number" ]; then
+            mkdir -p "$OUTPUT_DIR/$number"
+            echo "  Created directory: $OUTPUT_DIR/$number"
         fi
         
-        # Move and rename the file
+        # Copy and rename the file directly to OUTPUT_DIR
         new_filename="${file_type}.raw"
         
-        if [ -f "$number/$new_filename" ]; then
-            echo "  Warning: $number/$new_filename already exists, backing up as ${new_filename}.backup"
-            mv "$number/$new_filename" "$number/${new_filename}.backup"
+        if [ -f "$OUTPUT_DIR/$number/$new_filename" ]; then
+            echo "  Warning: $OUTPUT_DIR/$number/$new_filename already exists, creating timestamped version"
+            cp "$file" "$OUTPUT_DIR/$number/${new_filename}.${TIMESTAMP}"
+            echo "  Copied: $file -> $OUTPUT_DIR/$number/${new_filename}.${TIMESTAMP} (original preserved)"
+        else
+            cp "$file" "$OUTPUT_DIR/$number/$new_filename"
+            echo "  Copied: $file -> $OUTPUT_DIR/$number/$new_filename (original preserved)"
         fi
-        
-        mv "$file" "$number/$new_filename"
-        echo "  Moved: $file -> $number/$new_filename"
         
     else
         echo "Skipping file (doesn't match tda.XX or tdi.XX pattern): $file"
