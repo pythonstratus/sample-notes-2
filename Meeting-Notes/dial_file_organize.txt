@@ -16,12 +16,18 @@ cd "$INPUT_DIR" || exit 1
 echo "Starting file organization in $INPUT_DIR"
 echo "----------------------------------------"
 
-# Process all tdi and tda files (case insensitive)
-for file in *.[Tt][Dd][IiAa].*; do
-    # Skip if no files match the pattern
+# Process all tdi and tda files (case insensitive), excluding .tar files
+for file in *; do
+    # Skip if no files match or if it's a directory
     [ ! -f "$file" ] && continue
     
-    # Extract the file type (tdi or tda) and number
+    # Skip .tar files
+    if [[ $file == *.tar ]]; then
+        echo "Skipping tar file: $file"
+        continue
+    fi
+    
+    # Match pattern: TDA.XX or tdi.XX (case insensitive)
     if [[ $file =~ ^([Tt][Dd][IiAa])\.([0-9]+)$ ]]; then
         file_type=$(echo "${BASH_REMATCH[1]}" | tr '[:upper:]' '[:lower:]')  # Convert to lowercase
         number="${BASH_REMATCH[2]}"
@@ -46,7 +52,7 @@ for file in *.[Tt][Dd][IiAa].*; do
         echo "  Moved: $file -> $number/$new_filename"
         
     else
-        echo "Warning: File $file doesn't match expected pattern (type.number)"
+        echo "Skipping file (doesn't match tda.XX or tdi.XX pattern): $file"
     fi
 done
 
@@ -57,6 +63,15 @@ echo "Directory structure created:"
 for dir in */; do
     if [[ $dir =~ ^[0-9]+/$ ]]; then
         echo "  $dir"
-        ls -la "$dir" | grep -E "\.(raw|backup)$" | awk '{print "    " $9}'
+        ls -la "$dir" | grep -E "\.(raw|backup)$" | awk '{print "    " $9 " (" $5 " bytes)"}'
+    fi
+done
+
+echo ""
+echo "Files that were not processed:"
+for file in *; do
+    [ ! -f "$file" ] && continue
+    if [[ ! $file =~ ^([Tt][Dd][IiAa])\.([0-9]+)$ ]] && [[ $file != *.tar ]]; then
+        echo "  $file"
     fi
 done
