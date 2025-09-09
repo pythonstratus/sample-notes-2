@@ -4,9 +4,9 @@
 # Input directory containing the files
 INPUT_DIR="/eftu/entity/incoming"
 # Output directory where organized folders will be moved
-OUTPUT_DIR="/eftu/dial"
+OUTPUT_DIR="/entity/dial/current_extracts"
 # Backup directory for existing folders
-BACKUP_DIR="/eftu/dial/backups"
+BACKUP_DIR="/entity/dial/previous_extracts"
 # Timestamp for this run
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 
