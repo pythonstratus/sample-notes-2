@@ -10,8 +10,8 @@ Following up on our ETL dependency discussions with Sarah and the subsequent tec
 
 ## Critical Issue Summary
 
-**DIALAUD Table Dependency Conflict:**
-Our modernized DIAL processing no longer updates the DIALAUD table, but several legacy components still depend on it. This creates a significant data integrity issue that must be resolved.
+**DIALAUD Table Dependency Analysis:**
+Our modernized DIAL processing updates specific DIALAUD columns (CFFDT, QUEDT, CFFENTCNT, CFFMODCNT, QUEENTCNT, QUEMODCNT per area) as validated by stakeholder testing. However, we need to verify that the LOADDT column and other fields required by legacy views and functions are also being properly updated.
 
 ## Specific Dependencies Identified
 
@@ -43,20 +43,20 @@ When we examined MVIEW and EVIEW in the ENTITY environment, we discovered they a
 
 ## Immediate Action Items
 
-**1. Database Analysis Required:**
-- [ ] Audit all views and functions that reference DIALAUD
-- [ ] Identify complete dependency chain for DIALAUD table
-- [ ] Document which components can be migrated vs. which require DIALAUD updates
+**1. DIALAUD Column Gap Analysis:**
+- [ ] **We know our modern ETL updates:** CFFDT, QUEDT, CFFENTCNT, CFFMODCNT, QUEENTCNT, QUEMODCNT (per area)
+- [ ] **Critical gap:** Legacy views need LOADDT - is this being updated by our modern ETL?
+- [ ] **Missing columns:** Identify what other DIALAUD columns legacy systems expect but aren't in our validation list
 
 **2. View Analysis:**
 - [ ] **REQUEST: Can you please share the current `view_EVIEW.sql` and `view_MVIEW.sql` files?**
 - [ ] We need to analyze the complete view definitions to understand full dependencies
 - [ ] Verify environment-specific database links are correctly configured
 
-**3. Technical Decisions Required:**
-- [ ] **Option A:** Continue updating DIALAUD table for backward compatibility
-- [ ] **Option B:** Migrate all dependent views/functions to work without DIALAUD
-- [ ] **Option C:** Hybrid approach with gradual migration plan
+**3. Data Integrity Verification:**
+- [ ] **Confirm our modern ETL properly updates all DIALAUD columns used by legacy components**
+- [ ] **Verify LOADDT column is correctly populated for EVIEW/MVIEW queries**
+- [ ] **Test that dependent functions receive expected DIALAUD data**
 
 **4. Area Processing Strategy:**
 - [ ] Confirm Area 35 sequencing requirements with business team
@@ -67,13 +67,15 @@ When we examined MVIEW and EVIEW in the ENTITY environment, we discovered they a
 
 **Current Situation:**
 - Our performance testing showed excellent results (237M records in 3 minutes)
-- However, maintaining DIALAUD compatibility may impact performance gains
-- Need to balance optimization goals with system stability
+- **Stakeholder validation confirms we update specific DIALAUD columns (count-related fields per area)**
+- **Critical question:** Do we update LOADDT which is essential for EVIEW/MVIEW MAX(LOADDT) queries?
+- Legacy views and functions may require additional DIALAUD columns beyond our current scope
 
 **Risk Assessment:**
-- Breaking DIALAUD dependencies could impact downstream reporting
+- Legacy views may expect DIALAUD columns that our modern ETL doesn't update
 - Views with incorrect database links may cause production issues
 - Area 35 sequencing violations could affect risk calculations
+- LOADDT or other critical columns may not be populated as expected by dependent systems
 
 ## Next Steps
 
@@ -84,10 +86,11 @@ When we examined MVIEW and EVIEW in the ENTITY environment, we discovered they a
 
 ## Discussion Points for Next Team Meeting
 
-- Should we maintain DIALAUD updates or migrate dependent components?
+- Which specific DIALAUD columns does our modern ETL update vs. what legacy systems expect?
+- Are we populating LOADDT correctly for the MAX(LOADDT) queries in EVIEW/MVIEW?
 - How do we handle environment-specific database links correctly?
 - What's our strategy for Area 35 sequencing requirements?
-- Timeline for resolving these dependencies before performance optimization
+- Timeline for verifying DIALAUD compatibility before performance optimization
 
 This analysis confirms Sarah's concerns about hidden dependencies and validates her cautious approach. We need to resolve these technical debt issues before proceeding with major architectural changes.
 
