@@ -1,0 +1,53 @@
+# Team Update Summary - September 29, 2025
+
+## Key Progress & Status
+
+**Infrastructure & Setup**
+- SSL request YML: 100% complete
+- Infrastructure work: 50% complete (ETL job stored)
+- Call scheduled at 2:00 PM regarding line number one changes and intern jobs
+
+## Individual Updates
+
+**Ravi**
+- Completed multiple retention policy stories on Friday
+- Validated data and ran 6 out of 7 CR jobs successfully
+- One remaining job to finish before 1:00 PM
+- Creating test case documentation with Kamal on data setup procedures
+- No blockers
+
+**Kamal**
+- Resolved job issues (jar pickup and file archiving) with Chinmaya's help
+- Currently cleaning up code and adding comments
+- Needs to discuss Splunk notifications logging with Sam and Jordan
+
+**Brian**
+- Working on CSS changes for national local MYSAFE query tickets (expected completion today)
+- Plans to finish VR items within 30 minutes
+- Created Phase 1 UI tickets and notes on Friday
+- Issue with reproducing a problem - missing test data for "Brendan o' Brien"
+
+**Thomas**
+- Ticket 1-743-187 ready to push this morning
+- Working on UI improvements (tabs and horizontal bar design)
+- Sprint ending this week
+- Received positive initial feedback from Sarah
+
+**Santosh**
+- Story 1-750-480 approximately 90% complete (pending Ryan's PR review)
+- Submitted PR for neoda report updates (awaiting Ganga's review)
+- Monitoring pre-snapshot and backup table creation
+- No blockers
+
+**Ganga & Paul**
+- Testing deployment on VCP (faster due to local network)
+- Implemented multi-threaded master ICI system over weekend
+- Full test ran 3 hours Friday-Saturday
+- Today: rerunning tests with new files for data validation
+- Paul needs to test each step locally before full deployment
+
+## Action Items
+- Get feedback from Sarah on summaries during Tuesday call
+- Sharon working on mockups based on Eddie's analysis
+- Need to decide on feature placement per Brian Russell vs. Sarah's preferences
+- Continue building UI confidence with Sarah
