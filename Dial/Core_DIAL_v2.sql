@@ -4,6 +4,8 @@ CREATE OR REPLACE PROCEDURE DIALDEV.LOAD_COREDIAL AS
     v_end_time TIMESTAMP;
     v_rows_inserted NUMBER := 0;
     v_rows_rejected NUMBER := 0;
+    v_error_code NUMBER;
+    v_error_message VARCHAR2(4000);
 BEGIN
     v_start_time := SYSTIMESTAMP;
     
@@ -13,7 +15,6 @@ BEGIN
     
     -- Enable Exadata Smart Scan optimizations
     EXECUTE IMMEDIATE 'ALTER SESSION SET CELL_OFFLOAD_PROCESSING = TRUE';
-    EXECUTE IMMEDIATE 'ALTER SESSION SET "_serial_direct_read" = TRUE';
     
     v_batch_id := v_batch_id + 1;
     
@@ -164,11 +165,15 @@ BEGIN
     
     COMMIT;
     
-    -- Disable parallel DML
+    -- Disable parallel DML to clean up session settings
     EXECUTE IMMEDIATE 'ALTER SESSION DISABLE PARALLEL DML';
     
 EXCEPTION
     WHEN OTHERS THEN
+        -- Capture error details into variables first
+        v_error_code := SQLCODE;
+        v_error_message := SQLERRM;
+        
         -- Log the error to AUDIT_COREDIAL with all fields
         INSERT INTO AUDIT_COREDIAL (
             batch_id,
@@ -213,13 +218,13 @@ EXCEPTION
             NULL,
             NULL,
             NULL,
-            'ERROR: Code ' || SQLCODE || ' - ' || SQLERRM,
+            'ERROR: Code ' || v_error_code || ' - ' || v_error_message,
             SYSDATE
         );
         
         COMMIT;
         
-        -- Disable parallel DML
+        -- Disable parallel DML even in case of error
         EXECUTE IMMEDIATE 'ALTER SESSION DISABLE PARALLEL DML';
         
         RAISE;
