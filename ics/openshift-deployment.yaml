@@ -1,0 +1,137 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ics-zip-processor
+  labels:
+    app: ics-zip-processor
+    version: v1
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ics-zip-processor
+  template:
+    metadata:
+      labels:
+        app: ics-zip-processor
+        version: v1
+    spec:
+      containers:
+      - name: ics-zip-processor
+        image: your-registry/ics-zip-processor:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        env:
+        - name: SPRING_PROFILES_ACTIVE
+          value: "prod"
+        - name: DB_HOST
+          valueFrom:
+            secretKeyRef:
+              name: ics-zip-secrets
+              key: db-host
+        - name: DB_PORT
+          valueFrom:
+            secretKeyRef:
+              name: ics-zip-secrets
+              key: db-port
+        - name: DB_SID
+          valueFrom:
+            secretKeyRef:
+              name: ics-zip-secrets
+              key: db-sid
+        - name: DB_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: ics-zip-secrets
+              key: db-username
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: ics-zip-secrets
+              key: db-password
+        - name: SMTP_HOST
+          value: "smtp.abc.com"
+        - name: EMAIL_FROM
+          value: "noreply@abc.com"
+        - name: EMAIL_ENABLED
+          value: "true"
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /ics-zip-processor/actuator/health
+            port: 8080
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /ics-zip-processor/actuator/health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        volumeMounts:
+        - name: log-volume
+          mountPath: /als-ALS/app/entity/d.logfiles
+        - name: data-volume
+          mountPath: /als-ALS/app/entity/d.ics_zips
+        - name: archive-volume
+          mountPath: /als-ALS/app/dataload/d.ICS_ZIPS/d.ARCHIVE
+        - name: sql-scripts
+          mountPath: /als-ALS/app/execloc/d.dial
+      volumes:
+      - name: log-volume
+        persistentVolumeClaim:
+          claimName: ics-zip-logs-pvc
+      - name: data-volume
+        persistentVolumeClaim:
+          claimName: ics-zip-data-pvc
+      - name: archive-volume
+        persistentVolumeClaim:
+          claimName: ics-zip-archive-pvc
+      - name: sql-scripts
+        configMap:
+          name: ics-zip-sql-scripts
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ics-zip-processor
+  labels:
+    app: ics-zip-processor
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8080
+    targetPort: 8080
+    protocol: TCP
+    name: http
+  selector:
+    app: ics-zip-processor
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: ics-zip-processor
+  labels:
+    app: ics-zip-processor
+spec:
+  to:
+    kind: Service
+    name: ics-zip-processor
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect

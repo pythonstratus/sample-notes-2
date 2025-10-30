@@ -1,0 +1,166 @@
+spring:
+  application:
+    name: ics-zip-processor
+  
+  # Spring Batch Configuration
+  batch:
+    job:
+      enabled: false  # Don't run jobs on startup
+    jdbc:
+      initialize-schema: always
+      table-prefix: BATCH_
+  
+  # Database Configuration
+  datasource:
+    url: jdbc:oracle:thin:@${DB_HOST:localhost}:${DB_PORT:1521}:${DB_SID:ORCL}
+    username: ${DB_USERNAME:dial}
+    password: ${DB_PASSWORD:}
+    driver-class-name: oracle.jdbc.OracleDriver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 5
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+      pool-name: IcsZipHikariPool
+  
+  # Mail Configuration
+  mail:
+    host: ${SMTP_HOST:smtp.abc.com}
+    port: ${SMTP_PORT:25}
+    username: ${SMTP_USERNAME:}
+    password: ${SMTP_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: false
+          starttls:
+            enable: false
+          connectiontimeout: 5000
+          timeout: 5000
+          writetimeout: 5000
+  
+  # Actuator Configuration
+  actuator:
+    endpoints:
+      web:
+        exposure:
+          include: health,info,metrics,loggers
+        base-path: /actuator
+    endpoint:
+      health:
+        show-details: always
+
+# Server Configuration
+server:
+  port: ${SERVER_PORT:8080}
+  servlet:
+    context-path: /ics-zip-processor
+
+# Logging Configuration
+logging:
+  level:
+    root: INFO
+    com.abc.ics: DEBUG
+    org.springframework.batch: INFO
+    org.springframework.jdbc: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+  file:
+    name: ${LOG_FILE_PATH:/als-ALS/app/entity/d.logfiles}/ent_zip.log
+    max-size: 10MB
+    max-history: 30
+
+# Application Specific Configuration
+ics-zip:
+  # File Processing Configuration
+  file:
+    input-directory: ${INPUT_DIR:/als-ALS/app/entity/d.ics_zips}
+    input-file-pattern: "icszip.????????.dat"
+    working-file-name: "icszip.dat"
+    archive-directory: ${ARCHIVE_DIR:/als-ALS/app/dataload/d.ICS_ZIPS/d.ARCHIVE}
+  
+  # Log File Configuration
+  log:
+    directory: ${LOG_DIR:/als-ALS/app/entity/d.logfiles}
+    main-log-file: "ent_zip.log"
+    error-log-file: "ent_error.log"
+    delete-log-file: "ent_delete.log"
+  
+  # SQL Configuration
+  sql:
+    script-directory: ${SQL_SCRIPT_DIR:/als-ALS/app/execloc/d.dial}
+    crzips-script-name: "crzips.sql"
+  
+  # Processing Configuration
+  processing:
+    areas:
+      - 21
+      - 22
+      - 23
+      - 24
+      - 25
+      - 26
+      - 27
+      - 35
+    batch-size: 1000
+    chunk-size: 1000
+  
+  # Email Configuration
+  email:
+    from: ${EMAIL_FROM:noreply@abc.com}
+    subject-prefix: "[ICS-ZIP]"
+    enabled: ${EMAIL_ENABLED:true}
+
+---
+# Development Profile
+spring:
+  config:
+    activate:
+      on-profile: dev
+
+ics-zip:
+  email:
+    recipients:
+      default:
+        - sbse.automated.liens.entity.team@abc.com
+
+logging:
+  level:
+    com.abc.ics: DEBUG
+
+---
+# Test Profile
+spring:
+  config:
+    activate:
+      on-profile: test
+
+ics-zip:
+  email:
+    recipients:
+      default:
+        - sbse.automated.liens.entity.team@abc.com
+        - sbse.automated.liens.entity.als.team@abc.com
+        - sbse.automated.liens.entity.cron.loads@abc.com
+
+---
+# Production Profile
+spring:
+  config:
+    activate:
+      on-profile: prod
+
+ics-zip:
+  email:
+    recipients:
+      default:
+        - sbse.automated.liens.entity.team@abc.com
+        - sbse.automated.liens.entity.als.team@abc.com
+        - sbse.automated.liens.entity.cron.loads@abc.com
+
+logging:
+  level:
+    root: INFO
+    com.abc.ics: INFO
