@@ -1,0 +1,85 @@
+    /**
+     * Loads data from area file to OLDZIPS table
+     * 
+     * @param areaFile Path to area-specific data file
+     * @param area Area code
+     * @return Number of records inserted
+     */
+    @Transactional
+    public int loadDataToOldZips(Path areaFile, Integer area) {
+        try {
+            log.info("Area {}: Loading latest zip code assignments to oldzips", area);
+            
+            // Parse records from the file
+            List<IcsZipRecord> records = parseRecords(areaFile);
+            
+            if (records.isEmpty()) {
+                log.warn("Area {}: No valid records to load", area);
+                return 0;
+            }
+            
+            // Filter records for this specific area (redundant but safe)
+            List<IcsZipRecord> areaRecords = records.stream()
+                    .filter(r -> r.getDidocd().equals(area))
+                    .toList();
+            
+            if (areaRecords.isEmpty()) {
+                log.warn("Area {}: No records found for this area after filtering", area);
+                return 0;
+            }
+
+            // Perform batch insert
+            int insertedCount = batchInsertToOldZips(areaRecords, area);
+            
+            log.info("Area {}: Successfully loaded {} records to oldzips", area, insertedCount);
+            
+            // Check for discrepancies
+            if (insertedCount < areaRecords.size()) {
+                int failedRecords = areaRecords.size() - insertedCount;
+                log.warn("Area {}: {} records failed to insert", area, failedRecords);
+            }
+            
+            return insertedCount;
+            
+        } catch (Exception e) {
+            String errorMsg = String.format("ERROR: Unable to load area %d data file", area);
+            log.error(errorMsg, e);
+            throw new DatabaseOperationException(errorMsg, e);
+        }
+    }
+
+    /**
+     * Deletes existing records from OLDZIPS for a specific area
+     * 
+     * @param area Area code to delete
+     * @return Number of records deleted
+     */
+    @Transactional
+    public int deleteOldZipsForArea(Integer area) {
+        try {
+            String deleteSql = "DELETE FROM OLDZIPS WHERE DIDOCD = ?";
+            
+            int deletedCount = jdbcTemplate.update(deleteSql, area);
+            
+            log.info("Area {}: Deleted {} old records from OLDZIPS", area, deletedCount);
+            
+            return deletedCount;
+            
+        } catch (Exception e) {
+            log.error("Area {}: Error deleting old records", area, e);
+            throw new DatabaseOperationException("Failed to delete old records for area " + area, e);
+        }
+    }
+
+    /**
+     * Tests database connection
+     */
+    public void testConnection() {
+        try {
+            jdbcTemplate.queryForObject("SELECT 1 FROM DUAL", Integer.class);
+            log.info("Database connection test successful");
+        } catch (Exception e) {
+            log.error("Database connection test failed", e);
+            throw new DatabaseOperationException("Database connection test failed", e);
+        }
+    }
