@@ -1,8 +1,8 @@
-Here's a draft email for Samuel:
+Here's the revised email focusing on SBSE and DPQSIND:
 
 ---
 
-**Subject: Questions on SBSE Table Population and CSED Date Calculation in Legacy Code
+**Subject: Questions on SBSE Table Population and DPQSIND Field Discrepancy**
 
 **To:** Samuel
 
@@ -27,27 +27,20 @@ We've discovered that the SBSC/SVAC TDI table is not being populated correctly, 
 - Should these tables be synced weekly from Legacy? If so, what's the mechanism?
 - Is this something that should be handled through Goldengate replication?
 
-## 2. CSED Date Calculation Discrepancy (loaddial.pc)
+## 2. DPQSIND Field Discrepancy (Position 607)
 
-I've identified a date calculation issue in the legacy ProC code (see attached screenshot from loaddial.pc).
+I've identified a data discrepancy in the DP6Q variable that's causing inconsistencies between our database and Legacy.
 
 **The problem:**
-When `csed = 19000101` and `rectype == 5`, the code executes:
-```sql
-EXEC SQL SELECT
-  TO_CHAR(ADD_MONTHS(TO_DATE(:dtassd,'YYYYMMDD'),120),'YYYYMMDD')
-  INTO :csed
-  FROM DUAL;
-```
-
-**Expected behavior:** If dtassd = 1969 date, adding 120 months (10 years) should result in 1979
-
-**Actual behavior:** The calculation is producing 2035 instead
+- **Position 607 in our database records:** Shows value of "1" for all records
+- **Position 607 in Tanjita's data file:** Shows value of "1" for all records  
+- **Position 607 in Legacy:** Shows space (empty) for the same records
+- This affects approximately 6 million records
 
 **Questions:**
-- Is this a known issue in Legacy, or is the logic intentionally different than expected?
-- Should we be interpreting the date format differently?
-- Is there documentation on how CSED dates should be calculated for this scenario?
+- Why is Legacy storing a space instead of "1" in the 607th position?
+- Which is the correct/authoritative value - the "1" or the space?
+- Should we be converting the space to "1" during our data migration, or preserving the Legacy format?
 
 Please let me know if you need any additional context or if we should set up a call to walk through these issues together.
 
@@ -56,4 +49,4 @@ Thanks,
 
 ---
 
-Would you like me to adjust the tone or add any additional details?
+Would you like me to adjust anything else?
