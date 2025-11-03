@@ -1,0 +1,175 @@
+===============================================================================
+EXECUTION INSTRUCTIONS FOR ICSZIPS TABLE RELOAD
+===============================================================================
+
+OVERVIEW:
+This process loads data from dial.icszips into dialdev.icszips with optimal
+performance by temporarily disabling constraints and indexes. The process is
+split into 3 separate scripts to avoid ORA-14048 partition maintenance errors.
+
+===============================================================================
+PREREQUISITES:
+===============================================================================
+1. Verify you have access to both dial.icszips and dialdev.icszips tables
+2. Ensure you have sufficient privileges for DDL operations
+3. Backup or verify source data in dial.icszips before starting
+4. Schedule during a maintenance window if possible (large data load)
+
+===============================================================================
+EXECUTION STEPS:
+===============================================================================
+
+STEP 1: TRUNCATE TABLE
+------------------------
+File: step1_truncate_table.sql
+
+Actions:
+1. Open step1_truncate_table.sql in SQL Developer or your SQL client
+2. Execute the entire script
+3. Wait for "Step 1 Complete: Table truncated successfully" message
+4. **CRITICAL: Disconnect from database and reconnect (close and reopen session)**
+5. Do NOT proceed to Step 2 until you have reconnected
+
+Expected Output:
+- "Step 1a: NOLOGGING applied"
+- "Step 1 Complete: Table truncated successfully"
+
+Troubleshooting:
+- If you get ORA-14048 here, wait 2-3 minutes and retry
+- If error persists, contact DBA (Christina)
+
+===============================================================================
+
+STEP 2: LOAD DATA
+------------------
+File: step2_load_data.sql
+
+Actions:
+1. Open step2_load_data.sql in a NEW session (after reconnecting)
+2. Execute lines 1-13 (Enable parallel DML)
+3. Execute lines 15-22 (Generate DISABLE CONSTRAINT statements)
+   - Copy the output SQL statements
+   - Paste and execute them in the same session
+4. Execute lines 30-39 (Generate DISABLE INDEX statements)
+   - Copy the output SQL statements
+   - Paste and execute them in the same session
+5. Execute lines 47-52 (Parallel INSERT)
+6. Wait for the INSERT to complete and COMMIT
+7. Verify row count matches expected
+8. **CRITICAL: Disconnect from database and reconnect**
+9. Do NOT proceed to Step 3 until you have reconnected
+
+Expected Output:
+- "Parallel DML enabled"
+- Multiple ALTER TABLE/ALTER INDEX statements (you must run these)
+- "Step 2 Complete: Data loaded successfully"
+- Row count should match source table
+
+Troubleshooting:
+- If INSERT is slow, check parallel degree (currently set to 8)
+- If constraints/indexes don't exist, the SELECT statements will return no rows (OK)
+- Monitor progress with: SELECT COUNT(*) FROM dialdev.icszips;
+
+===============================================================================
+
+STEP 3: RE-ENABLE OBJECTS
+---------------------------
+File: step3_enable_objects.sql
+
+Actions:
+1. Open step3_enable_objects.sql in a NEW session (after reconnecting)
+2. Execute lines 1-10 (Generate ENABLE CONSTRAINT statements)
+   - Copy the output SQL statements
+   - Paste and execute them in the same session
+3. Execute lines 18-27 (Generate REBUILD INDEX statements)
+   - Copy the output SQL statements
+   - Paste and execute them in the same session
+4. Execute lines 35-38 (Reset session and re-enable logging)
+5. Execute lines 40-55 (Verification queries)
+6. Review verification results to ensure all objects are VALID/ENABLED
+
+Expected Output:
+- Multiple ALTER TABLE/ALTER INDEX statements (you must run these)
+- "Step 3 Complete: All operations finished successfully"
+- Verification shows all constraints ENABLED
+- Verification shows all indexes VALID
+- Final row count matches Step 2 count
+
+Troubleshooting:
+- If constraints fail to enable, there may be data integrity issues
+- If indexes fail to rebuild, check tablespace availability
+- Review ALL_CONSTRAINTS and ALL_INDEXES for status
+
+===============================================================================
+
+CRITICAL REMINDERS:
+===============================================================================
+1. **DISCONNECT AND RECONNECT between each step** - This is essential to avoid
+   ORA-14048 errors. Simply closing and reopening your SQL worksheet may not
+   be enough; you need a new database session.
+
+2. **Run the generated statements** - Steps 2 and 3 generate ALTER statements
+   that you must copy and execute. Don't skip this!
+
+3. **Monitor progress** - For large tables, the INSERT in Step 2 may take time.
+   You can monitor with: SELECT COUNT(*) FROM dialdev.icszips;
+
+4. **Rollback plan** - If something fails partway through:
+   - After Step 1: Table is empty, just re-run from Step 1
+   - After Step 2: Data loaded but objects disabled - MUST complete Step 3
+   - Never leave constraints/indexes disabled in production
+
+5. **Parallel degree** - Currently set to 8. Adjust based on CPU cores:
+   - 4-8 cores: Use PARALLEL(4)
+   - 8-16 cores: Use PARALLEL(8)
+   - 16+ cores: Use PARALLEL(16)
+
+===============================================================================
+
+ESTIMATED TIME:
+===============================================================================
+- Step 1: < 1 minute
+- Step 2: Depends on data volume (estimate 1-2 minutes per 100K rows)
+- Step 3: 5-10 minutes (index rebuilds take time)
+
+For a table with 1M rows, expect 30-45 minutes total.
+
+===============================================================================
+
+POST-EXECUTION VERIFICATION:
+===============================================================================
+Run these queries to confirm success:
+
+-- Verify row counts match
+SELECT 'SOURCE' AS table_name, COUNT(*) AS row_count FROM dial.icszips
+UNION ALL
+SELECT 'TARGET' AS table_name, COUNT(*) AS row_count FROM dialdev.icszips;
+
+-- Verify all constraints are enabled
+SELECT CONSTRAINT_NAME, CONSTRAINT_TYPE, STATUS
+FROM ALL_CONSTRAINTS
+WHERE OWNER = 'DIALDEV' AND TABLE_NAME = 'ICSZIPS';
+-- All should show STATUS = 'ENABLED'
+
+-- Verify all indexes are valid
+SELECT INDEX_NAME, STATUS, UNIQUENESS
+FROM ALL_INDEXES
+WHERE OWNER = 'DIALDEV' AND TABLE_NAME = 'ICSZIPS';
+-- All should show STATUS = 'VALID'
+
+-- Verify table is back to LOGGING mode
+SELECT TABLE_NAME, LOGGING
+FROM ALL_TABLES
+WHERE OWNER = 'DIALDEV' AND TABLE_NAME = 'ICSZIPS';
+-- Should show LOGGING = 'YES'
+
+===============================================================================
+
+CONTACT:
+===============================================================================
+If you encounter persistent ORA-14048 errors after following these steps,
+or if you have questions about partition-specific configurations, contact:
+- Samuel (for DBA coordination)
+- Christina (DBA for partition maintenance issues)
+
+===============================================================================
