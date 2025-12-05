@@ -111,7 +111,7 @@ COMMIT;
 2. **Index recommendation** - ensure you have an index on `coredial` for the join:
    ```sql
 
-
+```
    -- In your procedure
 EXECUTE IMMEDIATE 'TRUNCATE TABLE temp_counts';
 
